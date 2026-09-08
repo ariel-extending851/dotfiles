@@ -80,13 +80,15 @@ configure_disk() {
     fi
 
     log "Montando $mount_point..."
-    systemctl daemon-reload
     mount "$mount_point" || warn "Falha ao montar. Verifique se o disco já estava montado em outro lugar."
 }
 
 for uuid in "${!DISKS[@]}"; do
     configure_disk "$uuid" "${DISKS[$uuid]}"
 done
+
+log "Recarregando daemons do systemd..."
+systemctl daemon-reload
 
 log "---------------------------------------------------"
 log "Setup finalizado. Verifique /etc/crypttab e /etc/fstab."
