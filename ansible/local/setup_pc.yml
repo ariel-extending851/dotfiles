@@ -255,7 +255,7 @@
         - name: "Install akmods-keys and trigger signed module build in rpm-ostree"
           ansible.builtin.command:
             cmd: >
-              rpm-ostree install --force-replacefiles --idempotent --unchanged-exit-77
+              rpm-ostree install --idempotent --unchanged-exit-77
               {% if akmod_nvidia_installed.rc == 0 %}
               --uninstall=akmod-nvidia
               {% for kmod_pkg in installed_kmod_pkgs.stdout_lines %}
