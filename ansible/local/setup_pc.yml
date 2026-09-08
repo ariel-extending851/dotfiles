@@ -19,7 +19,6 @@
       - "rd.driver.blacklist=nouveau,nova-core"
       - "modprobe.blacklist=nouveau,nova-core"
       - "nvidia-drm.modeset=1"
-      - "initcall_blacklist=simpledrm_platform_driver_init"
 
     # Layered packages for NVIDIA
     nvidia_packages:
@@ -65,27 +64,7 @@
           failed_when: rpmfusion_install.rc != 0 and rpmfusion_install.rc != 77
           changed_when: rpmfusion_install.rc == 0
 
-        # 2. Layer NVIDIA Driver Packages
-        - name: "Install NVIDIA driver packages via rpm-ostree"
-          community.general.rpm_ostree_pkg:
-            name: "{{ nvidia_packages }}"
-            state: present
-          register: nvidia_pkg_result
-
-        # 3. Kernel Arguments (kargs)
-        - name: "Configure kernel arguments for NVIDIA driver"
-          ansible.builtin.command:
-            cmd: >
-              rpm-ostree kargs
-              {% for arg in nvidia_kargs %}
-              --append-if-missing={{ arg }}
-              {% endfor %}
-              --unchanged-exit-77
-          register: kargs_result
-          failed_when: kargs_result.rc != 0 and kargs_result.rc != 77
-          changed_when: kargs_result.rc == 0
-
-        # 4. Secure Boot - MOK Key Generation & Verification
+        # 2. Secure Boot - MOK Key Generation & Verification (Must precede driver build)
         - name: "Check if akmods MOK public key exists"
           ansible.builtin.stat:
             path: /etc/pki/akmods/certs/public_key.der
@@ -133,6 +112,27 @@
             - effective_mok_pwd | length > 0
           no_log: true
           register: mok_import_result
+
+        # 3. Kernel Arguments (kargs) - Configure required kargs & clean dangerous workarounds
+        - name: "Configure kernel arguments for NVIDIA driver"
+          ansible.builtin.command:
+            cmd: >
+              rpm-ostree kargs
+              --delete-if-present=initcall_blacklist=simpledrm_platform_driver_init
+              {% for arg in nvidia_kargs %}
+              --append-if-missing={{ arg }}
+              {% endfor %}
+              --unchanged-exit-77
+          register: kargs_result
+          failed_when: kargs_result.rc != 0 and kargs_result.rc != 77
+          changed_when: kargs_result.rc == 0
+
+        # 4. Layer NVIDIA Driver Packages
+        - name: "Install NVIDIA driver packages via rpm-ostree"
+          community.general.rpm_ostree_pkg:
+            name: "{{ nvidia_packages }}"
+            state: present
+          register: nvidia_pkg_result
 
         # 5. Kernel Module Build & Sign via akmods
         - name: "Check if NVIDIA kernel module exists for booted kernel"
