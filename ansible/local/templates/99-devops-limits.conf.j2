@@ -1,0 +1,16 @@
+# ==============================================================================
+# 99-devops.conf - Managed by Ansible (setup_pc.yml)
+# Process and File Limits for Containers and High-Throughput Dev Tools
+# ==============================================================================
+
+# User limits for open file descriptors (prevents "too many open files")
+*               soft    nofile          65536
+*               hard    nofile          65536
+root            soft    nofile          65536
+root            hard    nofile          65536
+
+# User limits for max processes / threads
+*               soft    nproc           65536
+*               hard    nproc           65536
+root            soft    nproc           65536
+root            hard    nproc           65536

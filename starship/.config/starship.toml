@@ -1,0 +1,72 @@
+# ==============================================================================
+# ~/.config/starship.toml - Managed by GNU Stow (dotfiles)
+# Optimized for DevOps, SRE & Platform Engineering
+# ==============================================================================
+
+# Custom Prompt Format
+format = """
+[┌───────────────────>](bold green)
+[│](bold green)$directory$rust$package$node$python$golang$java$terraform$docker_context$kubernetes$aws$azure
+[└─>](bold green) $git_branch$git_status$character"""
+
+# Prompt Settings
+add_newline = false
+scan_timeout = 1000
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[✗](bold red)"
+
+[directory]
+truncation_length = 3
+truncation_symbol = "…/"
+style = "bold cyan"
+
+[git_branch]
+symbol = "🌱 "
+style = "bold purple"
+
+[git_status]
+style = "bold red"
+format = '([$all_status$ahead_behind]($style) )'
+
+[aws]
+symbol = "☁️  "
+style = "bold yellow"
+format = '[$symbol($profile )(\($region\) )]($style)'
+
+[docker_context]
+symbol = "🐳 "
+style = "blue"
+format = '[$symbol$context]($style) '
+
+[kubernetes]
+symbol = "☸ "
+style = "cyan"
+format = '[$symbol$context( \($namespace\))]($style) '
+disabled = false
+
+[terraform]
+symbol = "🏗  "
+style = "bold 105"
+format = '[$symbol$workspace]($style) '
+
+[golang]
+symbol = "🐹 "
+style = "bold cyan"
+format = '[$symbol($version )]($style)'
+
+[python]
+symbol = "🐍 "
+style = "yellow"
+format = '[$symbol($version )(\($virtualenv\) )]($style)'
+
+[nodejs]
+symbol = "🐢 "
+style = "bold green"
+format = '[$symbol($version )]($style)'
+
+[java]
+symbol = "☕ "
+style = "red"
+format = '[$symbol($version )]($style)'

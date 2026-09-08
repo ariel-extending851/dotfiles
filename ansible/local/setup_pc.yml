@@ -12,6 +12,9 @@
     - system
     - nvidia
     - secureboot
+    - performance
+    - security
+    - sysctl
 
   vars:
     # Kernel arguments required for NVIDIA proprietary driver
@@ -315,6 +318,51 @@
               (kargs_result is defined and kargs_result is changed) or
               (rpmfusion_install is defined and rpmfusion_install is changed)
 
+    # 7. System Performance Tuning & Security Hardening
+    - name: "Deploy DevOps kernel performance tuning (/etc/sysctl.d/99-devops-performance.conf)"
+      ansible.builtin.template:
+        src: templates/99-devops-performance.conf.j2
+        dest: /etc/sysctl.d/99-devops-performance.conf
+        owner: root
+        group: root
+        mode: '0644'
+      register: sysctl_performance_result
+      tags:
+        - performance
+        - sysctl
+
+    - name: "Deploy system security hardening rules (/etc/sysctl.d/99-security-hardening.conf)"
+      ansible.builtin.template:
+        src: templates/99-security-hardening.conf.j2
+        dest: /etc/sysctl.d/99-security-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+      register: sysctl_hardening_result
+      tags:
+        - security
+        - sysctl
+
+    - name: "Deploy DevOps process and file limits (/etc/security/limits.d/99-devops.conf)"
+      ansible.builtin.template:
+        src: templates/99-devops-limits.conf.j2
+        dest: /etc/security/limits.d/99-devops.conf
+        owner: root
+        group: root
+        mode: '0644'
+      tags:
+        - performance
+        - security
+
+    - name: "Reload kernel sysctl parameters"
+      ansible.builtin.command:
+        cmd: sysctl --system
+      when: sysctl_performance_result is changed or sysctl_hardening_result is changed
+      tags:
+        - performance
+        - security
+        - sysctl
+
 # ==============================================================================
 # Play 2: User Configuration (Stateless DevOps Profile)
 # Runs with standard user privileges (become: false).
@@ -328,6 +376,8 @@
     - user
     - dotfiles
     - brew
+    - devpod
+    - podman
   vars:
     nvme_path: "/var/mnt/nvme"
     # Modern syntax to avoid Warnings
@@ -342,6 +392,19 @@
       - { name: "homelab", url: "git@github.com:ariel99gf/homelab.git" }
 
   tasks:
+    # 0. Container & Socket Infrastructure (Podman)
+    - name: "Ensure Podman user socket is enabled and running"
+      ansible.builtin.systemd:
+        name: podman.socket
+        scope: user
+        state: started
+        enabled: true
+      environment:
+        XDG_RUNTIME_DIR: "{{ ansible_facts['env']['XDG_RUNTIME_DIR'] | default('/run/user/' ~ ansible_facts['user_uid']) }}"
+      tags:
+        - podman
+        - devpod
+
     # 1. SSH Configuration
     - name: "Ensure GitHub is in known_hosts"
       known_hosts:
@@ -353,6 +416,17 @@
       file:
         path: "{{ workspace_dir }}/repos"
         state: directory
+
+    - name: "Ensure DevContainer mount directories exist"
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+        state: directory
+        mode: '0700'
+      loop:
+        - ".aws"
+        - ".config/sops"
+      tags:
+        - devpod
 
     # 4. Interface and Productivity Tools
     - name: "Install productivity tools on Host via Brew"
@@ -368,6 +442,9 @@
         - ripgrep # Fast grep
         - fd # Fast find
         - bitwarden-cli # CLI Password Manager
+        - starship # Fast cross-shell prompt
+        - lazygit # Simple terminal UI for git
+        - lazydocker # Terminal UI for container management
       register: brew_result
       changed_when: "'already installed' not in brew_result.stderr"
 
@@ -377,6 +454,39 @@
         url: "https://github.com/loft-sh/devpod/releases/latest/download/devpod-linux-amd64"
         dest: "/home/linuxbrew/.linuxbrew/bin/devpod"
         mode: "0755"
+
+    # 4.1.1 Configure DevPod Provider for Podman
+    - name: "Check existing DevPod providers"
+      ansible.builtin.command:
+        cmd: devpod provider list
+      register: devpod_providers_check
+      failed_when: false
+      changed_when: false
+      tags:
+        - devpod
+
+    - name: "Add Docker provider to DevPod (if missing)"
+      ansible.builtin.command:
+        cmd: devpod provider add docker
+      when: "'docker' not in devpod_providers_check.stdout"
+      tags:
+        - devpod
+
+    - name: "Configure DevPod to use Podman binary"
+      ansible.builtin.command:
+        cmd: devpod provider set-options docker -o DOCKER_PATH=podman
+      register: devpod_set_option
+      changed_when: "'Successfully set' in devpod_set_option.stdout"
+      tags:
+        - devpod
+
+    - name: "Set Docker (Podman) as default DevPod provider"
+      ansible.builtin.command:
+        cmd: devpod provider use docker
+      register: devpod_use_docker
+      changed_when: "'Successfully switched' in devpod_use_docker.stdout"
+      tags:
+        - devpod
 
     # 4.2 TPM (Tmux Plugin Manager)
     - name: "Install TPM (Tmux Plugin Manager)"
@@ -434,13 +544,20 @@
         create: yes
 
     # 8. Dotfiles
-    - name: "Prepare home directory for Stow (Remove conflicting files)"
-      file:
+    - name: "Check if .bash_aliases is already a symlink"
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
+      register: bash_aliases_stat
+
+    - name: "Prepare home directory for Stow (Remove conflicting regular file)"
+      ansible.builtin.file:
         path: "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
         state: absent
+      when: bash_aliases_stat.stat.exists and not bash_aliases_stat.stat.islnk
 
     - name: "Apply dotfiles via GNU Stow"
       shell: "stow --dir={{ dotfiles_dir }} --target={{ ansible_facts['env']['HOME'] }} --restow {{ item }}"
       with_items:
         - "tmux"
         - "bash"
+        - "starship"

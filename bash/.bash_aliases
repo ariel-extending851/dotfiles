@@ -8,7 +8,15 @@ elif [ -x /usr/local/bin/mise ]; then
 fi
 
 # --- Bitwarden SSH Agent ---
-export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+# Only export SSH_AUTH_SOCK if the socket exists to prevent connection errors when locked
+if [ -S "$HOME/.bitwarden-ssh-agent.sock" ]; then
+  export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+fi
+
+# --- Podman Rootless Socket for Docker CLI & DevPod ---
+if [ -z "$DOCKER_HOST" ] && [ -S "/run/user/$(id -u)/podman/podman.sock" ]; then
+  export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
+fi
 
 # --- Backup ---
 alias backup-now='sudo btrbk -c /etc/btrbk/btrbk.conf run && $HOME/backup-data-ext4.sh'
@@ -65,7 +73,13 @@ alias tfd='terraform destroy'
 alias tfo='terraform output'
 alias tfv='terraform validate'
 
-# Docker
+# Docker & Podman Integration
+if ! command -v docker &>/dev/null && command -v podman &>/dev/null; then
+  alias docker='podman'
+fi
+if ! command -v docker-compose &>/dev/null && command -v podman-compose &>/dev/null; then
+  alias docker-compose='podman-compose'
+fi
 alias d='docker'
 alias dc='docker compose'
 alias dps='docker ps'
@@ -74,6 +88,13 @@ alias di='docker images'
 alias drm='docker rm'
 alias drmi='docker rmi'
 alias dex='docker exec -it'
+alias ld='lazydocker'
+
+# DevPod Aliases
+alias dp='devpod'
+alias dpu='devpod up'
+alias dpd='devpod down'
+alias dpp='devpod provider'
 
 # Git (Complementing existing ones)
 alias gs='git status'
@@ -83,6 +104,7 @@ alias gpl='git pull'
 alias gco='git checkout'
 alias gb='git branch'
 alias gd='git diff'
+alias lg='lazygit'
 
 # --- Security & Compliance ---
 alias prw='prowler'
@@ -95,3 +117,8 @@ export LC_ALL=en_US.UTF-8
 export TERM=xterm-256color
 
 export COLORTERM=truecolor
+
+# --- Starship Prompt ---
+if command -v starship &>/dev/null; then
+  eval "$(starship init bash)"
+fi
