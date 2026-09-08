@@ -1,5 +1,11 @@
 # --- Activate Mise ---
-eval "$(/usr/local/bin/mise activate bash)"
+if command -v mise &>/dev/null; then
+  eval "$(mise activate bash)"
+elif [ -x "$HOME/.local/bin/mise" ]; then
+  eval "$("$HOME/.local/bin/mise" activate bash)"
+elif [ -x /usr/local/bin/mise ]; then
+  eval "$(/usr/local/bin/mise activate bash)"
+fi
 
 # --- Bitwarden SSH Agent ---
 export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"

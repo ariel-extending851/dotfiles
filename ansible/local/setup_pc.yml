@@ -134,29 +134,7 @@
             state: present
           register: nvidia_pkg_result
 
-        # 5. Kernel Module Build & Sign via akmods
-        - name: "Check if NVIDIA kernel module exists for booted kernel"
-          ansible.builtin.stat:
-            path: "/lib/modules/{{ ansible_facts['kernel'] }}/extra/nvidia/nvidia.ko.xz"
-          register: nvidia_kmod_file
-
-        - name: "Check if NVIDIA kernel module is signed"
-          ansible.builtin.command:
-            cmd: modinfo -F signer nvidia
-          register: nvidia_signer_check
-          failed_when: false
-          changed_when: false
-
-        - name: "Build and sign NVIDIA kernel modules with akmods"
-          ansible.builtin.command:
-            cmd: akmods --force --rebuild
-          when:
-            - not nvidia_kmod_file.stat.exists or
-              (nvidia_signer_check.stdout | trim == "") or
-              (nvidia_pkg_result is changed) or
-              (kmodgenca_result is defined and kmodgenca_result is changed)
-          register: akmods_build
-
+        # 5. Layer Signed Kernel Module RPM
         - name: "Find signed kmod RPM in akmods cache"
           ansible.builtin.find:
             paths: /var/cache/akmods/nvidia
@@ -166,9 +144,7 @@
         - name: "Layer signed kmod RPM via rpm-ostree"
           ansible.builtin.command:
             cmd: "rpm-ostree install --idempotent --unchanged-exit-77 {{ kmod_rpm_files.files[0].path }}"
-          when:
-            - kmod_rpm_files.matched > 0
-            - (akmods_build is changed) or (nvidia_signer_check.stdout | trim == "")
+          when: kmod_rpm_files.matched > 0
           register: kmod_rpm_install
           failed_when: kmod_rpm_install.rc != 0 and kmod_rpm_install.rc != 77
           changed_when: kmod_rpm_install.rc == 0
@@ -196,7 +172,6 @@
             - (nvidia_pkg_result is defined and nvidia_pkg_result.needs_reboot | default(false)) or
               (kargs_result is defined and kargs_result is changed) or
               (rpmfusion_install is defined and rpmfusion_install is changed) or
-              (akmods_build is defined and akmods_build is changed) or
               (kmod_rpm_install is defined and kmod_rpm_install is changed)
 
 # ==============================================================================
