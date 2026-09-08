@@ -1,0 +1,14 @@
+---
+- name: Prepare
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: "Ensure target directories exist (minimal container)"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/sysctl.d
+        - /etc/security/limits.d
