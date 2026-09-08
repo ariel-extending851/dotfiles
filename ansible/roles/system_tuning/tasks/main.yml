@@ -35,4 +35,4 @@
   changed_when: true
   when:
     - (system_tuning_performance_result is changed or system_tuning_hardening_result is changed)
-    - ansible_virtualization_type | default('') != 'container'
+    - ansible_virtualization_type | default('') not in ['docker', 'container', 'podman', 'containerd']
