@@ -1,0 +1,37 @@
+---
+# ==============================================================================
+# tasks/main.yml for system_tuning role
+# ==============================================================================
+
+- name: "Deploy DevOps kernel performance tuning (/etc/sysctl.d/99-devops-performance.conf)"
+  ansible.builtin.template:
+    src: 99-devops-performance.conf.j2
+    dest: /etc/sysctl.d/99-devops-performance.conf
+    owner: root
+    group: root
+    mode: '0644'
+  register: sysctl_performance_result
+
+- name: "Deploy system security hardening rules (/etc/sysctl.d/99-security-hardening.conf)"
+  ansible.builtin.template:
+    src: 99-security-hardening.conf.j2
+    dest: /etc/sysctl.d/99-security-hardening.conf
+    owner: root
+    group: root
+    mode: '0644'
+  register: sysctl_hardening_result
+
+- name: "Deploy DevOps process and file limits (/etc/security/limits.d/99-devops.conf)"
+  ansible.builtin.template:
+    src: 99-devops-limits.conf.j2
+    dest: /etc/security/limits.d/99-devops.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: "Reload kernel sysctl parameters"
+  ansible.builtin.command:
+    cmd: sysctl --system
+  when:
+    - (sysctl_performance_result is changed or sysctl_hardening_result is changed)
+    - ansible_virtualization_type | default('') != 'container'

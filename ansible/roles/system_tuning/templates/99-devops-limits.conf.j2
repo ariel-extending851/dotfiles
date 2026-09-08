@@ -1,0 +1,16 @@
+# ==============================================================================
+# 99-devops.conf - Managed by system_tuning Ansible Role
+# Process and File Limits for High-Throughput Dev Tools & Containers
+# ==============================================================================
+
+# User limits for open file descriptors (prevents "too many open files")
+*               soft    nofile          {{ tuning_nofile_limit }}
+*               hard    nofile          {{ tuning_nofile_limit }}
+root            soft    nofile          {{ tuning_nofile_limit }}
+root            hard    nofile          {{ tuning_nofile_limit }}
+
+# User limits for max processes / threads
+*               soft    nproc           {{ tuning_nproc_limit }}
+*               hard    nproc           {{ tuning_nproc_limit }}
+root            soft    nproc           {{ tuning_nproc_limit }}
+root            hard    nproc           {{ tuning_nproc_limit }}

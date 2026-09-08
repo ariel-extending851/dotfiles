@@ -1,0 +1,32 @@
+# ==============================================================================
+# .mise.toml - Workstation & IaC Task Orchestration (SRE Platform)
+# ==============================================================================
+
+[tasks.lint]
+description = "Run static analysis with ansible-lint"
+run = "ansible-lint"
+
+[tasks."test:syntax"]
+description = "Validate syntax of all playbooks"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check"
+
+[tasks."test:molecule"]
+description = "Run Molecule integration and idempotency test on system_tuning role"
+dir = "ansible/roles/system_tuning"
+run = "molecule test"
+
+[tasks.verify]
+description = "Run deep host verification assertions (GPU, Secure Boot, Podman Socket, DevPod)"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/verify.yml"
+
+[tasks.apply]
+description = "Apply user dotfiles, brew tools, DevPod and podman socket"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags user"
+
+[tasks."apply:system"]
+description = "Apply root system tuning and hardening"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags system,sysctl,performance,security -K"
+
+[tasks.test]
+description = "Run complete test suite (syntax and host verification)"
+depends = ["test:syntax", "verify"]

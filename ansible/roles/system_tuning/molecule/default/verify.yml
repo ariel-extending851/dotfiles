@@ -1,0 +1,22 @@
+---
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: "Verify configuration files exist"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: config_files
+      loop:
+        - /etc/sysctl.d/99-devops-performance.conf
+        - /etc/sysctl.d/99-security-hardening.conf
+        - /etc/security/limits.d/99-devops.conf
+
+    - name: "Assert all configuration files exist with 0644 mode"
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode == '0644'
+        fail_msg: "File {{ item.stat.path }} is missing or has incorrect permissions"
+      loop: "{{ config_files.results }}"

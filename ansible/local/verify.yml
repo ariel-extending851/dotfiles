@@ -1,0 +1,118 @@
+---
+# ==============================================================================
+# verify.yml - Host Verification Suite (SRE Workstation Acceptance Testing)
+# Read-only and strictly idempotent. Runs assertions against the live host.
+# ==============================================================================
+- name: "Host Verification Suite (SRE Workstation)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    # --------------------------------------------------------------------------
+    # 1. Podman User Socket Verification
+    # --------------------------------------------------------------------------
+    - name: "Check if Podman rootless socket exists"
+      ansible.builtin.stat:
+        path: "/run/user/{{ ansible_facts['user_uid'] }}/podman/podman.sock"
+      register: podman_sock_stat
+
+    - name: "Assert Podman socket is active and listening"
+      ansible.builtin.assert:
+        that:
+          - podman_sock_stat.stat.exists
+          - podman_sock_stat.stat.issock
+        fail_msg: "FALHA: O socket do Podman não está ativo em /run/user/{{ ansible_facts['user_uid'] }}/podman/podman.sock!"
+        success_msg: "OK: Socket do Podman ativo para DevPod e Docker CLI."
+
+    # --------------------------------------------------------------------------
+    # 2. DevPod Provider Configuration Verification
+    # --------------------------------------------------------------------------
+    - name: "Check DevPod providers"
+      ansible.builtin.command:
+        cmd: devpod provider list
+      register: devpod_providers
+      changed_when: false
+
+    - name: "Assert DevPod is configured with Docker (Podman) as default"
+      ansible.builtin.assert:
+        that:
+          - "'docker' in devpod_providers.stdout"
+          - "'true' in devpod_providers.stdout"
+        fail_msg: "FALHA: O DevPod não está com o provedor 'docker' (podman) ativo como default!"
+        success_msg: "OK: DevPod pronto com integração nativa ao Podman."
+
+    # --------------------------------------------------------------------------
+    # 3. Dotfiles & GNU Stow Symlinks Verification
+    # --------------------------------------------------------------------------
+    - name: "Check Stow symlinks in $HOME"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: dotfiles_stat
+      loop:
+        - "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
+        - "{{ ansible_facts['env']['HOME'] }}/.config/starship.toml"
+
+    - name: "Assert dotfiles are valid symlinks"
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.islnk
+        fail_msg: "FALHA: Arquivo {{ item.stat.path }} não existe ou não é um symlink do Stow!"
+        success_msg: "OK: Dotfile {{ item.stat.path }} corretamente symlinkado."
+      loop: "{{ dotfiles_stat.results }}"
+
+    # --------------------------------------------------------------------------
+    # 4. SRE Productivity CLI Tools Verification
+    # --------------------------------------------------------------------------
+    - name: "Check availability of CLI tools"
+      ansible.builtin.command:
+        cmd: "{{ 'tmux -V' if item == 'tmux' else item ~ ' --version' }}"
+      register: cli_tools_check
+      loop:
+        - starship
+        - lazygit
+        - lazydocker
+        - tmux
+        - zoxide
+        - eza
+        - bat
+        - rg
+      changed_when: false
+
+    - name: "Assert all CLI tools executed successfully"
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+        fail_msg: "FALHA: A ferramenta {{ item.item }} não está instalada ou falhou ao executar!"
+        success_msg: "OK: Ferramenta {{ item.item }} operacional."
+      loop: "{{ cli_tools_check.results }}"
+
+    # --------------------------------------------------------------------------
+    # 5. Hardware NVIDIA & Secure Boot Verification
+    # --------------------------------------------------------------------------
+    - name: "Check Secure Boot status"
+      ansible.builtin.command:
+        cmd: mokutil --sb-state
+      register: sb_state
+      changed_when: false
+
+    - name: "Assert Secure Boot is active"
+      ansible.builtin.assert:
+        that:
+          - "'SecureBoot enabled' in sb_state.stdout"
+        fail_msg: "FALHA: Secure Boot não está habilitado no sistema!"
+        success_msg: "OK: Secure Boot ativo e validado."
+
+    - name: "Check NVIDIA GPU acceleration"
+      ansible.builtin.command:
+        cmd: nvidia-smi
+      register: nvidia_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert NVIDIA GPU driver is functional"
+      ansible.builtin.assert:
+        that:
+          - nvidia_check.rc == 0
+        fail_msg: "AVISO: Driver NVIDIA não reportou aceleração via nvidia-smi."
+        success_msg: "OK: Driver NVIDIA acelerando com sucesso."

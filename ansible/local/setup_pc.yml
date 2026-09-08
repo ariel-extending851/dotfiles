@@ -318,46 +318,10 @@
               (kargs_result is defined and kargs_result is changed) or
               (rpmfusion_install is defined and rpmfusion_install is changed)
 
-    # 7. System Performance Tuning & Security Hardening
-    - name: "Deploy DevOps kernel performance tuning (/etc/sysctl.d/99-devops-performance.conf)"
-      ansible.builtin.template:
-        src: templates/99-devops-performance.conf.j2
-        dest: /etc/sysctl.d/99-devops-performance.conf
-        owner: root
-        group: root
-        mode: '0644'
-      register: sysctl_performance_result
-      tags:
-        - performance
-        - sysctl
-
-    - name: "Deploy system security hardening rules (/etc/sysctl.d/99-security-hardening.conf)"
-      ansible.builtin.template:
-        src: templates/99-security-hardening.conf.j2
-        dest: /etc/sysctl.d/99-security-hardening.conf
-        owner: root
-        group: root
-        mode: '0644'
-      register: sysctl_hardening_result
-      tags:
-        - security
-        - sysctl
-
-    - name: "Deploy DevOps process and file limits (/etc/security/limits.d/99-devops.conf)"
-      ansible.builtin.template:
-        src: templates/99-devops-limits.conf.j2
-        dest: /etc/security/limits.d/99-devops.conf
-        owner: root
-        group: root
-        mode: '0644'
-      tags:
-        - performance
-        - security
-
-    - name: "Reload kernel sysctl parameters"
-      ansible.builtin.command:
-        cmd: sysctl --system
-      when: sysctl_performance_result is changed or sysctl_hardening_result is changed
+    # 7. System Performance Tuning & Security Hardening (Modular Role)
+    - name: "Include system_tuning role"
+      ansible.builtin.include_role:
+        name: ../roles/system_tuning
       tags:
         - performance
         - security
@@ -445,6 +409,7 @@
         - starship # Fast cross-shell prompt
         - lazygit # Simple terminal UI for git
         - lazydocker # Terminal UI for container management
+        - mise # Polyglot runtime and tool manager
       register: brew_result
       changed_when: "'already installed' not in brew_result.stderr"
 

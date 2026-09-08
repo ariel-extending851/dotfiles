@@ -1,32 +1,27 @@
 # ==============================================================================
-# 99-security-hardening.conf - Managed by Ansible (setup_pc.yml)
-# Security Hardening for Workstation & Container Host
+# 99-security-hardening.conf - Managed by system_tuning Ansible Role
+# Security Hardening for Workstations and Container Hosts
 # ==============================================================================
 
 # --- Kernel & Memory Protection ---
-# Restricts exposing kernel pointer addresses in /proc and other interfaces
-kernel.kptr_restrict = 2
-# Restricts dmesg access to root/CAP_SYSLOG
-kernel.dmesg_restrict = 1
-# Restricts ptrace scope to prevent cross-process memory injection
-kernel.yama.ptrace_scope = 1
+kernel.kptr_restrict = {{ tuning_kptr_restrict }}
+kernel.dmesg_restrict = {{ tuning_dmesg_restrict }}
+kernel.yama.ptrace_scope = {{ tuning_yama_ptrace_scope }}
 
 # --- File System Protection ---
-# Defends against symlink and hardlink race condition attacks in shared dirs
 fs.protected_hardlinks = 1
 fs.protected_symlinks = 1
 fs.protected_fifos = 2
 fs.protected_regular = 2
 
 # --- Network Hardening (Anti-Spoofing & DoS Protection) ---
-# Enable Strict Reverse Path Filtering (prevents IP spoofing)
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 
-# Ignore broadcast ICMP echo requests (mitigates Smurf attack amplification)
+# Ignore broadcast ICMP echo requests
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 
-# Disable acceptance and sending of ICMP redirects (prevents rogue route injection)
+# Disable acceptance and sending of ICMP redirects
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.all.send_redirects = 0

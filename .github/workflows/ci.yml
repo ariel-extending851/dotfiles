@@ -1,0 +1,52 @@
+name: "CI / IaC Quality & Molecule Testing"
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  lint:
+    name: "Ansible Lint & Syntax Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Install Ansible & Ansible-lint"
+        run: |
+          pip install ansible-core ansible-lint
+
+      - name: "Run Ansible Lint"
+        run: ansible-lint
+
+      - name: "Syntax check playbook"
+        run: ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check
+
+  molecule:
+    name: "Molecule Role Testing (Idempotence & State)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Install Molecule & Plugins"
+        run: |
+          pip install molecule "molecule-plugins[docker]" ansible-core
+
+      - name: "Run Molecule test on system_tuning role"
+        working-directory: ansible/roles/system_tuning
+        env:
+          MOLECULE_DRIVER: docker
+        run: molecule test
