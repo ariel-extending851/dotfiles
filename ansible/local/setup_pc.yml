@@ -1,8 +1,188 @@
 ---
+# ==============================================================================
+# Play 1: Host Configuration (NVIDIA Drivers & Secure Boot)
+# Runs with root privileges (become: true). Use -K (--ask-become-pass).
+# ==============================================================================
+- name: "Host Configuration - NVIDIA Drivers & Secure Boot"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+  tags:
+    - system
+    - nvidia
+    - secureboot
+
+  vars:
+    # Kernel arguments required for NVIDIA proprietary driver
+    nvidia_kargs:
+      - "rd.driver.blacklist=nouveau,nova-core"
+      - "modprobe.blacklist=nouveau,nova-core"
+      - "nvidia-drm.modeset=1"
+      - "initcall_blacklist=simpledrm_platform_driver_init"
+
+    # Layered packages for NVIDIA
+    nvidia_packages:
+      - akmod-nvidia
+      - xorg-x11-drv-nvidia
+      - xorg-x11-drv-nvidia-cuda
+
+    # Optional MOK password from environment variable (empty by default)
+    mok_enroll_password: "{{ lookup('env', 'MOK_ENROLL_PASSWORD') | default('', true) }}"
+
+  tasks:
+    - name: "Check if system is running Fedora Atomic (OSTree)"
+      ansible.builtin.stat:
+        path: /run/ostree-booted
+      register: ostree_booted
+
+    - name: "Check for NVIDIA GPU hardware"
+      ansible.builtin.shell: "lspci -nn | grep -iE 'vga|3d controller' | grep -i nvidia"
+      register: nvidia_gpu_check
+      failed_when: false
+      changed_when: false
+
+    - name: "Manage NVIDIA & Secure Boot on Fedora Atomic"
+      when:
+        - ostree_booted.stat.exists
+        - nvidia_gpu_check.rc == 0
+      block:
+        # 1. RPM Fusion Repositories
+        - name: "Check if RPM Fusion repository package is installed"
+          ansible.builtin.command:
+            cmd: rpm -q rpmfusion-nonfree-release
+          register: rpmfusion_check
+          failed_when: false
+          changed_when: false
+
+        - name: "Install RPM Fusion repositories via rpm-ostree"
+          ansible.builtin.command:
+            cmd: >
+              rpm-ostree install --idempotent --unchanged-exit-77
+              https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
+              https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
+          register: rpmfusion_install
+          failed_when: rpmfusion_install.rc != 0 and rpmfusion_install.rc != 77
+          changed_when: rpmfusion_install.rc == 0
+
+        # 2. Layer NVIDIA Driver Packages
+        - name: "Install NVIDIA driver packages via rpm-ostree"
+          community.general.rpm_ostree_pkg:
+            name: "{{ nvidia_packages }}"
+            state: present
+          register: nvidia_pkg_result
+
+        # 3. Kernel Arguments (kargs)
+        - name: "Configure kernel arguments for NVIDIA driver"
+          ansible.builtin.command:
+            cmd: >
+              rpm-ostree kargs
+              {% for arg in nvidia_kargs %}
+              --append-if-missing={{ arg }}
+              {% endfor %}
+              --unchanged-exit-77
+          register: kargs_result
+          failed_when: kargs_result.rc != 0 and kargs_result.rc != 77
+          changed_when: kargs_result.rc == 0
+
+        # 4. Secure Boot - MOK Key Generation & Verification
+        - name: "Check if akmods MOK public key exists"
+          ansible.builtin.stat:
+            path: /etc/pki/akmods/certs/public_key.der
+          register: mok_cert_stat
+
+        - name: "Generate local MOK key pair if missing"
+          ansible.builtin.command:
+            cmd: kmodgenca -a
+          when: not mok_cert_stat.stat.exists
+
+        - name: "Check if MOK key is enrolled in UEFI"
+          ansible.builtin.command:
+            cmd: mokutil --test-key /etc/pki/akmods/certs/public_key.der
+          register: mok_key_test
+          failed_when: false
+          changed_when: false
+
+        - name: "Check if MOK key enrollment is already pending reboot"
+          ansible.builtin.command:
+            cmd: mokutil --list-new
+          register: mok_list_new
+          failed_when: false
+          changed_when: false
+
+        - name: "Prompt for temporary MOK enrollment password (if not enrolled or pending)"
+          ansible.builtin.pause:
+            prompt: "Digite uma senha temporária única para registrar a chave MOK no Secure Boot (usada na tela azul MokManager ao reiniciar)"
+            echo: false
+          register: mok_prompt_input
+          when:
+            - mok_key_test.rc != 0
+            - mok_list_new.stdout | trim == ""
+            - mok_enroll_password | length == 0
+          no_log: true
+
+        - name: "Stage MOK key enrollment in UEFI"
+          ansible.builtin.shell: |
+            printf "%s\n%s\n" "{{ effective_mok_pwd }}" "{{ effective_mok_pwd }}" | mokutil --import /etc/pki/akmods/certs/public_key.der
+          vars:
+            effective_mok_pwd: "{{ mok_enroll_password if (mok_enroll_password | length > 0) else (mok_prompt_input.user_input | default('')) }}"
+          when:
+            - mok_key_test.rc != 0
+            - mok_list_new.stdout | trim == ""
+            - effective_mok_pwd | length > 0
+          no_log: true
+          register: mok_import_result
+
+        # 5. Kernel Module Build & Sign via akmods
+        - name: "Check if NVIDIA kernel module exists for booted kernel"
+          ansible.builtin.stat:
+            path: "/lib/modules/{{ ansible_facts['kernel'] }}/extra/nvidia/nvidia.ko.xz"
+          register: nvidia_kmod_file
+
+        - name: "Build and sign NVIDIA kernel modules with akmods"
+          ansible.builtin.command:
+            cmd: akmods --force
+          when:
+            - not nvidia_kmod_file.stat.exists or (nvidia_pkg_result is changed)
+          register: akmods_build
+
+        # 6. User Guidance Notifications
+        - name: "Notify MOK enrollment pending reboot"
+          ansible.builtin.debug:
+            msg:
+              - "================================================================="
+              - "AVISO SECURE BOOT: Chave MOK importada com sucesso!"
+              - "Na próxima inicialização, a tela azul do MokManager solicitará a"
+              - "senha temporária que você definiu para confirmar a inscrição."
+              - "Após confirmar, o Secure Boot poderá ser ativado na BIOS/UEFI."
+              - "================================================================="
+          when: mok_import_result is changed
+
+        - name: "Notify system reboot required"
+          ansible.builtin.debug:
+            msg:
+              - "================================================================="
+              - "AVISO: Novos pacotes em camada ou parâmetros de kernel foram alterados."
+              - "Reinicie o sistema ('systemctl reboot') para inicializar na nova deployment."
+              - "================================================================="
+          when:
+            - (nvidia_pkg_result is defined and nvidia_pkg_result.needs_reboot | default(false)) or
+              (kargs_result is defined and kargs_result is changed) or
+              (rpmfusion_install is defined and rpmfusion_install is changed)
+
+# ==============================================================================
+# Play 2: User Configuration (Stateless DevOps Profile)
+# Runs with standard user privileges (become: false).
+# ==============================================================================
 - name: "Setup Stateless DevOps"
   hosts: localhost
   connection: local
   gather_facts: true
+  become: false
+  tags:
+    - user
+    - dotfiles
+    - brew
   vars:
     nvme_path: "/var/mnt/nvme"
     # Modern syntax to avoid Warnings
@@ -15,7 +195,6 @@
 
     repositories:
       - { name: "homelab", url: "git@github.com:ariel99gf/homelab.git" }
-      - { name: "dotfiles", url: "git@github.com:ariel99gf/dotfiles.git" }
 
   tasks:
     # 1. SSH Configuration
@@ -64,7 +243,7 @@
     - name: "Clone repositories to Workspace/repos"
       git:
         repo: "{{ item.url }}"
-        dest: "{{ workspace_dir }}/repos/{{ item.name }}"
+        dest: "{{ workspace_dir }}/{{ item.name }}"
         accept_hostkey: yes
       with_items: "{{ repositories }}"
 

@@ -1,1 +1,7 @@
 .gemini/
+*.priv
+*.der
+*.key
+*.pem
+*.crt
+*.retry

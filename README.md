@@ -31,8 +31,11 @@ To bootstrap a new machine:
 
 2.  **Run the Ansible Playbook:**
     ```bash
-    # If Ansible is not installed, Bluefin usually has it or use: brew install ansible
-    ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml
+    # Full setup (including Host, NVIDIA drivers & Secure Boot MOK):
+    ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml -K
+
+    # Or run only user-space configs (Brew, dotfiles, Git):
+    ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags user
     ```
 
 ## 🚀 Daily Workflow
