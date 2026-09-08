@@ -127,27 +127,159 @@
           failed_when: kargs_result.rc != 0 and kargs_result.rc != 77
           changed_when: kargs_result.rc == 0
 
-        # 4. Layer NVIDIA Driver Packages
-        - name: "Install NVIDIA driver packages via rpm-ostree"
+        # 4. Secure Boot - Package Local MOK Keys for rpm-ostree Compose Sandbox
+        # On Fedora Atomic, rpm-ostree builds akmods in an isolated sandbox that cannot
+        # see /etc/pki/akmods on the host. Packaging the keys into an RPM and deploying
+        # them along with macros.kmodtool ensures all kmod builds are automatically signed.
+        - name: "Check if akmods-keys package is already installed"
+          ansible.builtin.command:
+            cmd: rpm -q akmods-keys
+          register: akmods_keys_installed
+          failed_when: false
+          changed_when: false
+
+        - name: "Check rpm-ostree status for pending/staged deployments"
+          ansible.builtin.command:
+            cmd: rpm-ostree status
+          register: rpm_ostree_status_check
+          changed_when: false
+
+        - name: "Check if akmod-nvidia is currently installed"
+          ansible.builtin.command:
+            cmd: rpm -q akmod-nvidia
+          register: akmod_nvidia_installed
+          failed_when: false
+          changed_when: false
+
+        - name: "Check for any existing local kmod-nvidia packages"
+          ansible.builtin.shell: "rpm -qa 'kmod-nvidia*'"
+          register: installed_kmod_pkgs
+          failed_when: false
+          changed_when: false
+
+        - name: "Build akmods-keys RPM package locally"
+          when:
+            - akmods_keys_installed.rc != 0
+            - "'akmods-keys' not in rpm_ostree_status_check.stdout"
+          block:
+            - name: "Create akmods-keys build directories"
+              ansible.builtin.file:
+                path: "{{ item }}"
+                state: directory
+                mode: '0700'
+                owner: root
+                group: root
+              loop:
+                - /var/cache/akmods-keys-build
+                - /var/cache/akmods-keys-build/SOURCES
+                - /var/cache/akmods-keys-build/SPECS
+                - /var/cache/akmods-keys-build/BUILD
+                - /var/cache/akmods-keys-build/RPMS
+                - /var/cache/akmods-keys-build/SRPMS
+
+            - name: "Copy local MOK certificates to RPM build sources"
+              ansible.builtin.copy:
+                src: "{{ item.src }}"
+                dest: "{{ item.dest }}"
+                remote_src: true
+                mode: "{{ item.mode }}"
+                owner: root
+                group: root
+              loop:
+                - { src: "/etc/pki/akmods/certs/public_key.der", dest: "/var/cache/akmods-keys-build/SOURCES/public_key.der", mode: "0644" }
+                - { src: "/etc/pki/akmods/private/private_key.priv", dest: "/var/cache/akmods-keys-build/SOURCES/private_key.priv", mode: "0600" }
+
+            - name: "Create macros.kmodtool for akmods-keys"
+              ansible.builtin.copy:
+                dest: /var/cache/akmods-keys-build/SOURCES/macros.kmodtool
+                content: |
+                  # Configured by akmods-keys for rpm-ostree module signing
+                  %_kmodtool_signmodules 1
+                  %_kmodtool_signmodules_pubkey /etc/pki/akmods-keys/certs/public_key.der
+                  %_kmodtool_signmodules_privkey /etc/pki/akmods-keys/private/private_key.priv
+                mode: '0644'
+                owner: root
+                group: root
+
+            - name: "Create akmods-keys RPM spec file"
+              ansible.builtin.copy:
+                dest: /var/cache/akmods-keys-build/SPECS/akmods-keys.spec
+                content: |
+                  Name:           akmods-keys
+                  Version:        0.1
+                  Release:        1%{?dist}
+                  Summary:        Local akmods MOK keys for rpm-ostree kmod signing
+                  License:        MIT
+                  BuildArch:      noarch
+
+                  %description
+                  Local MOK keys and kmodtool configuration for rpm-ostree module signing.
+
+                  %install
+                  mkdir -p %{buildroot}%{_sysconfdir}/pki/akmods-keys/certs
+                  mkdir -p %{buildroot}%{_sysconfdir}/pki/akmods-keys/private
+                  mkdir -p %{buildroot}%{_sysconfdir}/rpm
+
+                  install -m 0644 %{_sourcedir}/public_key.der %{buildroot}%{_sysconfdir}/pki/akmods-keys/certs/public_key.der
+                  install -m 0600 %{_sourcedir}/private_key.priv %{buildroot}%{_sysconfdir}/pki/akmods-keys/private/private_key.priv
+                  install -m 0644 %{_sourcedir}/macros.kmodtool %{buildroot}%{_sysconfdir}/rpm/macros.kmodtool
+
+                  %files
+                  %dir %{_sysconfdir}/pki/akmods-keys
+                  %dir %attr(0755,root,root) %{_sysconfdir}/pki/akmods-keys/certs
+                  %dir %attr(0700,root,root) %{_sysconfdir}/pki/akmods-keys/private
+                  %attr(0644,root,root) %{_sysconfdir}/pki/akmods-keys/certs/public_key.der
+                  %attr(0600,root,root) %{_sysconfdir}/pki/akmods-keys/private/private_key.priv
+                  %config(noreplace) %{_sysconfdir}/rpm/macros.kmodtool
+                mode: '0644'
+                owner: root
+                group: root
+
+            - name: "Compile akmods-keys RPM package"
+              ansible.builtin.command:
+                cmd: rpmbuild -bb --define "_topdir /var/cache/akmods-keys-build" /var/cache/akmods-keys-build/SPECS/akmods-keys.spec
+              register: akmods_keys_rpmbuild
+
+        - name: "Find generated akmods-keys RPM"
+          ansible.builtin.find:
+            paths: /var/cache/akmods-keys-build/RPMS/noarch
+            patterns: "akmods-keys-*.noarch.rpm"
+          register: akmods_keys_rpm_files
+          when:
+            - akmods_keys_installed.rc != 0
+            - "'akmods-keys' not in rpm_ostree_status_check.stdout"
+
+        # 5. Layer NVIDIA Driver & akmods-keys Packages
+        # When akmods-keys is newly built and akmod-nvidia was already layered, we trigger
+        # a rebuild of akmod-nvidia within the new deployment so that modules are signed.
+        - name: "Install akmods-keys and trigger signed module build in rpm-ostree"
+          ansible.builtin.command:
+            cmd: >
+              rpm-ostree install --force-replacefiles --idempotent --unchanged-exit-77
+              {% if akmod_nvidia_installed.rc == 0 %}
+              --uninstall=akmod-nvidia
+              {% for kmod_pkg in installed_kmod_pkgs.stdout_lines %}
+              --uninstall={{ kmod_pkg }}
+              {% endfor %}
+              akmod-nvidia
+              {% else %}
+              {{ nvidia_packages | join(' ') }}
+              {% endif %}
+              {{ akmods_keys_rpm_files.files[0].path }}
+          when:
+            - akmods_keys_installed.rc != 0
+            - "'akmods-keys' not in rpm_ostree_status_check.stdout"
+            - akmods_keys_rpm_files is defined
+            - akmods_keys_rpm_files.matched | default(0) > 0
+          register: akmods_keys_install
+          failed_when: akmods_keys_install.rc != 0 and akmods_keys_install.rc != 77
+          changed_when: akmods_keys_install.rc == 0
+
+        - name: "Ensure all NVIDIA driver packages are present via rpm-ostree"
           community.general.rpm_ostree_pkg:
             name: "{{ nvidia_packages }}"
             state: present
           register: nvidia_pkg_result
-
-        # 5. Layer Signed Kernel Module RPM
-        - name: "Find signed kmod RPM in akmods cache"
-          ansible.builtin.find:
-            paths: /var/cache/akmods/nvidia
-            patterns: "kmod-nvidia-{{ ansible_facts['kernel'] }}*.rpm"
-          register: kmod_rpm_files
-
-        - name: "Layer signed kmod RPM via rpm-ostree"
-          ansible.builtin.command:
-            cmd: "rpm-ostree install --idempotent --unchanged-exit-77 {{ kmod_rpm_files.files[0].path }}"
-          when: kmod_rpm_files.matched > 0
-          register: kmod_rpm_install
-          failed_when: kmod_rpm_install.rc != 0 and kmod_rpm_install.rc != 77
-          changed_when: kmod_rpm_install.rc == 0
 
         # 6. User Guidance Notifications
         - name: "Notify MOK enrollment pending reboot"
@@ -165,14 +297,15 @@
           ansible.builtin.debug:
             msg:
               - "================================================================="
-              - "AVISO: Módulos do kernel reconstruídos/assinados ou sistema alterado."
-              - "Reinicie o sistema ('systemctl reboot') para inicializar na nova deployment."
+              - "AVISO: Módulos NVIDIA reconstruídos e assinados com a sua chave MOK!"
+              - "Reinicie o computador ('systemctl reboot') para inicializar na nova deployment."
+              - "Após o reboot, o driver NVIDIA carregará com aceleração total e Secure Boot ativo!"
               - "================================================================="
           when:
-            - (nvidia_pkg_result is defined and nvidia_pkg_result.needs_reboot | default(false)) or
+            - (akmods_keys_install is defined and akmods_keys_install is changed) or
+              (nvidia_pkg_result is defined and nvidia_pkg_result.needs_reboot | default(false)) or
               (kargs_result is defined and kargs_result is changed) or
-              (rpmfusion_install is defined and rpmfusion_install is changed) or
-              (kmod_rpm_install is defined and kmod_rpm_install is changed)
+              (rpmfusion_install is defined and rpmfusion_install is changed)
 
 # ==============================================================================
 # Play 2: User Configuration (Stateless DevOps Profile)
