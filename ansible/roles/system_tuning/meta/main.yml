@@ -1,5 +1,7 @@
 ---
 galaxy_info:
+  role_name: system_tuning
+  namespace: ariel99gf
   author: "Ariel Fonseca"
   description: "DevOps & SRE kernel performance tuning and security hardening"
   company: "Personal"
