@@ -64,6 +64,14 @@
           failed_when: rpmfusion_install.rc != 0 and rpmfusion_install.rc != 77
           changed_when: rpmfusion_install.rc == 0
 
+        # 1.5 Ensure MOK key generation and RPM packaging tools are available on host
+        - name: "Ensure akmods and rpm-build tooling are available on host"
+          ansible.builtin.command:
+            cmd: rpm-ostree install --apply-live --idempotent --unchanged-exit-77 -y akmods rpm-build
+          register: build_tools_install
+          failed_when: build_tools_install.rc != 0 and build_tools_install.rc != 77
+          changed_when: build_tools_install.rc == 0
+
         # 2. Secure Boot - MOK Key Generation & Verification (Must precede driver build)
         - name: "Check if akmods MOK public key exists"
           ansible.builtin.stat:
