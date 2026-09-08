@@ -95,6 +95,7 @@
           ansible.builtin.command:
             cmd: kmodgenca -a
           when: not mok_cert_stat.stat.exists
+          register: kmodgenca_result
 
         - name: "Check if MOK key is enrolled in UEFI"
           ansible.builtin.command:
@@ -139,11 +140,21 @@
             path: "/lib/modules/{{ ansible_facts['kernel'] }}/extra/nvidia/nvidia.ko.xz"
           register: nvidia_kmod_file
 
+        - name: "Check if NVIDIA kernel module is signed"
+          ansible.builtin.command:
+            cmd: modinfo -F signer nvidia
+          register: nvidia_signer_check
+          failed_when: false
+          changed_when: false
+
         - name: "Build and sign NVIDIA kernel modules with akmods"
           ansible.builtin.command:
-            cmd: akmods --force
+            cmd: akmods --force --rebuild
           when:
-            - not nvidia_kmod_file.stat.exists or (nvidia_pkg_result is changed)
+            - not nvidia_kmod_file.stat.exists or
+              (nvidia_signer_check.stdout | trim == "") or
+              (nvidia_pkg_result is changed) or
+              (kmodgenca_result is defined and kmodgenca_result is changed)
           register: akmods_build
 
         # 6. User Guidance Notifications
@@ -162,13 +173,14 @@
           ansible.builtin.debug:
             msg:
               - "================================================================="
-              - "AVISO: Novos pacotes em camada ou parâmetros de kernel foram alterados."
+              - "AVISO: Módulos do kernel reconstruídos/assinados ou sistema alterado."
               - "Reinicie o sistema ('systemctl reboot') para inicializar na nova deployment."
               - "================================================================="
           when:
             - (nvidia_pkg_result is defined and nvidia_pkg_result.needs_reboot | default(false)) or
               (kargs_result is defined and kargs_result is changed) or
-              (rpmfusion_install is defined and rpmfusion_install is changed)
+              (rpmfusion_install is defined and rpmfusion_install is changed) or
+              (akmods_build is defined and akmods_build is changed)
 
 # ==============================================================================
 # Play 2: User Configuration (Stateless DevOps Profile)
