@@ -4,9 +4,9 @@
 # ==============================================================================
 
 # --- Kernel & Memory Protection ---
-kernel.kptr_restrict = {{ tuning_kptr_restrict }}
-kernel.dmesg_restrict = {{ tuning_dmesg_restrict }}
-kernel.yama.ptrace_scope = {{ tuning_yama_ptrace_scope }}
+kernel.kptr_restrict = {{ system_tuning_kptr_restrict }}
+kernel.dmesg_restrict = {{ system_tuning_dmesg_restrict }}
+kernel.yama.ptrace_scope = {{ system_tuning_yama_ptrace_scope }}
 
 # --- File System Protection ---
 fs.protected_hardlinks = 1

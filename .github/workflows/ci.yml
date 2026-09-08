@@ -19,15 +19,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: "Install Ansible & Ansible-lint"
+      - name: "Install Ansible, Lint & Collections"
         run: |
           pip install ansible-core ansible-lint
+          ansible-galaxy collection install community.general
 
       - name: "Run Ansible Lint"
         run: ansible-lint
 
-      - name: "Syntax check playbook"
-        run: ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check
+      - name: "Syntax check playbooks"
+        run: |
+          ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check
+          ansible-playbook -i ansible/local/hosts.ini ansible/local/verify.yml --syntax-check
 
   molecule:
     name: "Molecule Role Testing (Idempotence & State)"
@@ -44,9 +47,8 @@ jobs:
       - name: "Install Molecule & Plugins"
         run: |
           pip install molecule "molecule-plugins[docker]" ansible-core
+          ansible-galaxy collection install community.general
 
       - name: "Run Molecule test on system_tuning role"
         working-directory: ansible/roles/system_tuning
-        env:
-          MOLECULE_DRIVER: docker
         run: molecule test

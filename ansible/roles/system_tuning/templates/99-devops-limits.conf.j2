@@ -4,13 +4,13 @@
 # ==============================================================================
 
 # User limits for open file descriptors (prevents "too many open files")
-*               soft    nofile          {{ tuning_nofile_limit }}
-*               hard    nofile          {{ tuning_nofile_limit }}
-root            soft    nofile          {{ tuning_nofile_limit }}
-root            hard    nofile          {{ tuning_nofile_limit }}
+*               soft    nofile          {{ system_tuning_nofile_limit }}
+*               hard    nofile          {{ system_tuning_nofile_limit }}
+root            soft    nofile          {{ system_tuning_nofile_limit }}
+root            hard    nofile          {{ system_tuning_nofile_limit }}
 
 # User limits for max processes / threads
-*               soft    nproc           {{ tuning_nproc_limit }}
-*               hard    nproc           {{ tuning_nproc_limit }}
-root            soft    nproc           {{ tuning_nproc_limit }}
-root            hard    nproc           {{ tuning_nproc_limit }}
+*               soft    nproc           {{ system_tuning_nproc_limit }}
+*               hard    nproc           {{ system_tuning_nproc_limit }}
+root            soft    nproc           {{ system_tuning_nproc_limit }}
+root            hard    nproc           {{ system_tuning_nproc_limit }}

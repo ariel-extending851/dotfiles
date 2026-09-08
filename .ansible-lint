@@ -1,7 +1,6 @@
 ---
 # ==============================================================================
 # .ansible-lint - Ansible Lint Configuration
-# Tailored for Workstation Automation and SRE Standards
 # ==============================================================================
 profile: production
 
@@ -9,7 +8,7 @@ exclude_paths:
   - scripts/legacy/
   - .github/
   - tests/
+  - ansible/local/
 
 skip_list:
   - experimental
-  - command-instead-of-module # Required for specific OSTree, Mokutil, and DevPod CLI calls

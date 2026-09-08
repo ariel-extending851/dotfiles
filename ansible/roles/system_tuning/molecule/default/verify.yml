@@ -7,7 +7,7 @@
     - name: "Verify configuration files exist"
       ansible.builtin.stat:
         path: "{{ item }}"
-      register: config_files
+      register: system_tuning_config_files
       loop:
         - /etc/sysctl.d/99-devops-performance.conf
         - /etc/sysctl.d/99-security-hardening.conf
@@ -19,4 +19,4 @@
           - item.stat.exists
           - item.stat.mode == '0644'
         fail_msg: "File {{ item.stat.path }} is missing or has incorrect permissions"
-      loop: "{{ config_files.results }}"
+      loop: "{{ system_tuning_config_files.results }}"

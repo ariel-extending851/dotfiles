@@ -4,17 +4,17 @@
 # ==============================================================================
 
 # --- DevPod & File Watchers Tuning ---
-fs.inotify.max_user_watches = {{ tuning_inotify_max_user_watches }}
-fs.inotify.max_user_instances = {{ tuning_inotify_max_user_instances }}
-fs.file-max = {{ tuning_file_max }}
+fs.inotify.max_user_watches = {{ system_tuning_inotify_max_user_watches }}
+fs.inotify.max_user_instances = {{ system_tuning_inotify_max_user_instances }}
+fs.file-max = {{ system_tuning_file_max }}
 
 # --- Memory & VFS Responsiveness ---
-vm.swappiness = {{ tuning_vm_swappiness }}
-vm.vfs_cache_pressure = {{ tuning_vm_vfs_cache_pressure }}
-vm.max_map_count = {{ tuning_vm_max_map_count }}
+vm.swappiness = {{ system_tuning_vm_swappiness }}
+vm.vfs_cache_pressure = {{ system_tuning_vm_vfs_cache_pressure }}
+vm.max_map_count = {{ system_tuning_vm_max_map_count }}
 
 # --- Container & K8s Networking ---
-net.ipv4.ip_forward = {{ tuning_net_ip_forward }}
-net.core.somaxconn = {{ tuning_net_somaxconn }}
-net.ipv4.tcp_max_syn_backlog = {{ tuning_net_tcp_max_syn_backlog }}
-net.ipv4.tcp_fastopen = {{ tuning_net_tcp_fastopen }}
+net.ipv4.ip_forward = {{ system_tuning_net_ip_forward }}
+net.core.somaxconn = {{ system_tuning_net_somaxconn }}
+net.ipv4.tcp_max_syn_backlog = {{ system_tuning_net_tcp_max_syn_backlog }}
+net.ipv4.tcp_fastopen = {{ system_tuning_net_tcp_fastopen }}

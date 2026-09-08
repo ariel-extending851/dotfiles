@@ -2,10 +2,10 @@
 dependency:
   name: galaxy
 driver:
-  name: "${MOLECULE_DRIVER:-podman}"
+  name: docker
 platforms:
   - name: instance
-    image: "${MOLECULE_IMAGE:-geerlingguy/docker-fedora39-ansible:latest}"
+    image: geerlingguy/docker-fedora39-ansible:latest
     pre_build_image: true
     privileged: true
     volumes:

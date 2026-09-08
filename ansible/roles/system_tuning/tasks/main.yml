@@ -10,7 +10,7 @@
     owner: root
     group: root
     mode: '0644'
-  register: sysctl_performance_result
+  register: system_tuning_performance_result
 
 - name: "Deploy system security hardening rules (/etc/sysctl.d/99-security-hardening.conf)"
   ansible.builtin.template:
@@ -19,7 +19,7 @@
     owner: root
     group: root
     mode: '0644'
-  register: sysctl_hardening_result
+  register: system_tuning_hardening_result
 
 - name: "Deploy DevOps process and file limits (/etc/security/limits.d/99-devops.conf)"
   ansible.builtin.template:
@@ -32,6 +32,7 @@
 - name: "Reload kernel sysctl parameters"
   ansible.builtin.command:
     cmd: sysctl --system
+  changed_when: true
   when:
-    - (sysctl_performance_result is changed or sysctl_hardening_result is changed)
+    - (system_tuning_performance_result is changed or system_tuning_hardening_result is changed)
     - ansible_virtualization_type | default('') != 'container'
