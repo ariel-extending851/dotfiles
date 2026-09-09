@@ -5,7 +5,7 @@ driver:
   name: docker
 platforms:
   - name: instance
-    image: geerlingguy/docker-fedora39-ansible:latest
+    image: geerlingguy/docker-fedora41-ansible:latest
     pre_build_image: true
     privileged: true
     volumes:

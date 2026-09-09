@@ -321,7 +321,7 @@
     # 7. System Performance Tuning & Security Hardening (Modular Role)
     - name: "Include system_tuning role"
       ansible.builtin.include_role:
-        name: ../roles/system_tuning
+        name: system_tuning
       tags:
         - performance
         - security
@@ -343,7 +343,6 @@
     - devpod
     - podman
   vars:
-    nvme_path: "/var/mnt/nvme"
     # Modern syntax to avoid Warnings
     workspace_dir: "{{ ansible_facts['env']['HOME'] }}/Projects"
     dotfiles_dir: "{{ workspace_dir }}/dotfiles"

@@ -31,7 +31,7 @@ rm -f "$HOME/.bash_aliases"
 # 5. Apply symlinks
 # This links bash/.bash_aliases and mise/.config/mise/config.toml
 cd "$(dirname "$0")"
-stow --target="$HOME" --restow bash tmux mise opencode
+stow --target="$HOME" --restow bash tmux mise starship
 
 # 6. Install Personal Tools
 # Since config.toml is now linked to ~/.config/mise/config.toml,

@@ -1,0 +1,6 @@
+---
+- name: "Reload sysctl"
+  ansible.builtin.command:
+    cmd: sysctl --system
+  listen: "reload sysctl"
+  when: ansible_virtualization_type | default('') not in ['docker', 'container', 'podman', 'containerd']

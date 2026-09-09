@@ -19,4 +19,20 @@
           - item.stat.exists
           - item.stat.mode == '0644'
         fail_msg: "File {{ item.stat.path }} is missing or has incorrect permissions"
+        success_msg: "OK: {{ item.stat.path }} exists with correct permissions"
       loop: "{{ system_tuning_config_files.results }}"
+
+    - name: "Verify sysctl performance values are present"
+      ansible.builtin.command:
+        cmd: grep -q "fs.inotify.max_user_watches" /etc/sysctl.d/99-devops-performance.conf
+      changed_when: false
+
+    - name: "Verify security hardening values are present"
+      ansible.builtin.command:
+        cmd: grep -q "kernel.kptr_restrict" /etc/sysctl.d/99-security-hardening.conf
+      changed_when: false
+
+    - name: "Verify limits configuration is present"
+      ansible.builtin.command:
+        cmd: grep -q "nofile" /etc/security/limits.d/99-devops.conf
+      changed_when: false

@@ -6,7 +6,7 @@
 # Custom Prompt Format
 format = """
 [┌───────────────────>](bold green)
-[│](bold green)$directory$rust$package$node$python$golang$java$terraform$docker_context$kubernetes$aws$azure
+[│](bold green)$directory$rust$package$nodejs$python$golang$java$terraform$docker_context$kubernetes$aws$azure
 [└─>](bold green) $git_branch$git_status$character"""
 
 # Prompt Settings

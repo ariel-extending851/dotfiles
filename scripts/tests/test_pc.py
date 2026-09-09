@@ -29,6 +29,16 @@ def log_info(msg: str):
     print(f"{BLUE}[INFO]{RESET} {msg}")
 
 
+def safe_run(cmd, **kwargs):
+    """Run a command safely, returning None if binary not found."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=60, **kwargs)
+    except FileNotFoundError:
+        return None
+    except subprocess.TimeoutExpired:
+        return None
+
+
 class TestRunner:
     def __init__(self):
         self.failed = 0
@@ -44,8 +54,8 @@ class TestRunner:
         log_info("1. Validating shell scripts syntax...")
         aliases_file = DOTFILES_DIR / "bash/.bash_aliases"
         if aliases_file.exists():
-            res = subprocess.run(["bash", "-n", str(aliases_file)])
-            if res.returncode == 0:
+            res = safe_run(["bash", "-n", str(aliases_file)])
+            if res and res.returncode == 0:
                 log_pass("Shell syntax check: .bash_aliases")
             else:
                 log_fail("Syntax error in .bash_aliases")
@@ -55,7 +65,7 @@ class TestRunner:
         log_info("2. Validating Ansible playbook syntax...")
         for playbook in ["setup_pc.yml", "verify.yml"]:
             pb_path = DOTFILES_DIR / "ansible/local" / playbook
-            res = subprocess.run(
+            res = safe_run(
                 [
                     "ansible-playbook",
                     "-i",
@@ -63,11 +73,12 @@ class TestRunner:
                     str(pb_path),
                     "--syntax-check",
                 ],
-                capture_output=True,
-                text=True,
             )
-            if res.returncode == 0:
+            if res and res.returncode == 0:
                 log_pass(f"Ansible syntax check: {playbook}")
+            elif res is None:
+                log_fail(f"ansible-playbook not found in PATH")
+                self.failed += 1
             else:
                 log_fail(f"Ansible syntax error in {playbook}: {res.stderr}")
                 self.failed += 1
@@ -86,7 +97,8 @@ class TestRunner:
             errors = 0
             for line in tmpl.read_text().splitlines():
                 line = line.split("#")[0].strip()
-                if not line or "=" not in line:
+                # Skip empty lines, non-key=value lines, and Jinja2 expressions
+                if not line or "=" not in line or "{{" in line or "{%" in line:
                     continue
                 key = line.split("=")[0].strip()
                 proc_path = pathlib.Path("/proc/sys") / key.replace(".", "/")
@@ -102,24 +114,27 @@ class TestRunner:
         log_info("4. Validating Starship configuration...")
         starship_cfg = DOTFILES_DIR / "starship/.config/starship.toml"
         if starship_cfg.exists():
-            res = subprocess.run(["starship", "print-config"], capture_output=True)
-            if res.returncode == 0:
+            res = safe_run(["starship", "print-config"])
+            if res and res.returncode == 0:
                 log_pass("Starship TOML syntax is valid (verified by starship CLI)")
+            elif res is None:
+                log_fail("Starship is not installed")
+                self.failed += 1
             else:
                 log_fail("Starship TOML configuration error")
                 self.failed += 1
 
         # 5. Podman & DevPod CLI
         log_info("5. Checking Podman and DevPod readiness...")
-        res_podman = subprocess.run(["podman", "--version"], capture_output=True, text=True)
-        if res_podman.returncode == 0:
+        res_podman = safe_run(["podman", "--version"])
+        if res_podman and res_podman.returncode == 0:
             log_pass(f"Podman is installed ({res_podman.stdout.strip()})")
         else:
             log_fail("Podman is not installed")
             self.failed += 1
 
-        res_devpod = subprocess.run(["devpod", "version"], capture_output=True, text=True)
-        if res_devpod.returncode == 0:
+        res_devpod = safe_run(["devpod", "version"])
+        if res_devpod and res_devpod.returncode == 0:
             log_pass(f"DevPod CLI is installed ({res_devpod.stdout.strip()})")
         else:
             log_fail("DevPod is not installed")
@@ -131,9 +146,14 @@ class TestRunner:
         print("=" * 65)
         verify_pb = DOTFILES_DIR / "ansible/local/verify.yml"
         hosts_ini = DOTFILES_DIR / "ansible/local/hosts.ini"
-        res = subprocess.run(["ansible-playbook", "-i", str(hosts_ini), str(verify_pb)])
-        if res.returncode == 0:
+        res = safe_run(
+            ["ansible-playbook", "-i", str(hosts_ini), str(verify_pb)],
+        )
+        if res and res.returncode == 0:
             log_pass("Host verification completed with 100% assertions valid!")
+        elif res is None:
+            log_fail("ansible-playbook not found in PATH")
+            self.failed += 1
         else:
             log_fail("Host verification assertions failed!")
             self.failed += 1

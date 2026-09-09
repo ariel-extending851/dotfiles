@@ -5,3 +5,10 @@
 *.pem
 *.crt
 *.retry
+.ansible/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.swp
+*~
+.mise.local.toml
