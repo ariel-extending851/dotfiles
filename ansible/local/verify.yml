@@ -116,3 +116,116 @@
           - nvidia_check.rc == 0
         fail_msg: "AVISO: Driver NVIDIA não reportou aceleração via nvidia-smi."
         success_msg: "OK: Driver NVIDIA acelerando com sucesso."
+
+    # --------------------------------------------------------------------------
+    # 6. EUD - Ollama Local AI Verification
+    # --------------------------------------------------------------------------
+    - name: "Check Ollama API health"
+      ansible.builtin.uri:
+        url: "http://localhost:11434/api/tags"
+        method: GET
+        status_code: 200
+      register: ollama_verify
+      failed_when: false
+
+    - name: "Assert Ollama is running and responsive"
+      ansible.builtin.assert:
+        that:
+          - ollama_verify.status == 200
+        fail_msg: "FALHA: Ollama não está respondendo em http://localhost:11434!"
+        success_msg: "OK: Ollama API ativa e responsiva."
+
+    - name: "Check Ollama llama3:8b model is available"
+      ansible.builtin.uri:
+        url: "http://localhost:11434/api/tags"
+        method: GET
+        return_content: true
+      register: ollama_models
+      failed_when: false
+
+    - name: "Assert llama3:8b model is loaded"
+      ansible.builtin.assert:
+        that:
+          - "'llama3' in ollama_models.content"
+        fail_msg: "AVISO: Modelo llama3:8b não encontrado no Ollama."
+        success_msg: "OK: Modelo llama3:8b disponível no Ollama."
+
+    # --------------------------------------------------------------------------
+    # 7. EUD - Flatpak SDR Applications Verification
+    # --------------------------------------------------------------------------
+    - name: "Check installed Flatpak SDR applications"
+      ansible.builtin.command:
+        cmd: flatpak list --app --columns=application
+      register: flatpak_list
+      changed_when: false
+
+    - name: "Assert SDR Flatpak applications are installed"
+      ansible.builtin.assert:
+        that:
+          - "'dk.gqrx.gqrx' in flatpak_list.stdout"
+          - "'org.qgis.qgis' in flatpak_list.stdout"
+          - "'com.chirpmyradio.chirp' in flatpak_list.stdout"
+        fail_msg: "FALHA: Nem todos os Flatpaks SDR estão instalados!"
+        success_msg: "OK: Todos os Flatpaks SDR/Rádio operacionais."
+
+    - name: "Check if SatDump is installed (rpm-ostree)"
+      ansible.builtin.command:
+        cmd: rpm -q SatDump
+      register: satdump_installed
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert SatDump is installed"
+      ansible.builtin.assert:
+        that:
+          - satdump_installed.rc == 0
+        fail_msg: "AVISO: SatDump não está instalado. Execute 'mise run apply:eud:nut' com -K."
+        success_msg: "OK: SatDump (satélites meteorológicos) instalado."
+
+    # --------------------------------------------------------------------------
+    # 8. EUD - TileServer GL Verification
+    # --------------------------------------------------------------------------
+    - name: "Check TileServer GL container status"
+      ansible.builtin.command:
+        cmd: podman ps --format "{{ '{{' }}.Names{{ '}}' }}" --filter name=tileserver-gl
+      register: tileserver_ps
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert TileServer GL container is running"
+      ansible.builtin.assert:
+        that:
+          - "'tileserver-gl' in tileserver_ps.stdout"
+        fail_msg: "AVISO: Container TileServer GL não está rodando."
+        success_msg: "OK: TileServer GL ativo, mapas offline disponíveis em http://localhost:8080."
+
+    # --------------------------------------------------------------------------
+    # 9. EUD - NUT/UPS Verification
+    # --------------------------------------------------------------------------
+    - name: "Check if NUT packages are installed"
+      ansible.builtin.command:
+        cmd: rpm -q nut
+      register: nut_installed
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert NUT is installed"
+      ansible.builtin.assert:
+        that:
+          - nut_installed.rc == 0
+        fail_msg: "AVISO: NUT não está instalado. Execute 'mise run apply:system' com -K."
+        success_msg: "OK: NUT (Network UPS Tools) instalado."
+
+    - name: "Check NUT monitor service status"
+      ansible.builtin.systemd:
+        name: nut-monitor.service
+      register: nut_monitor_status
+      failed_when: false
+
+    - name: "Assert NUT monitor is active"
+      ansible.builtin.assert:
+        that:
+          - nut_monitor_status.status.ActiveState == 'active'
+        fail_msg: "AVISO: nut-monitor.service não está ativo. Conecte o no-break USB e reinicie os serviços."
+        success_msg: "OK: NUT monitor ativo, protegendo contra falha de energia."
+      when: nut_installed.rc == 0

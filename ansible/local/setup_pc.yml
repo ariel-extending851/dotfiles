@@ -525,3 +525,484 @@
         - "tmux"
         - "bash"
         - "starship"
+
+# ==============================================================================
+# Play 3: EUD System Configuration (Network UPS Tools)
+# Runs with root privileges (become: true). Use -K (--ask-become-pass).
+# ==============================================================================
+- name: "EUD System - UPS Power Resilience (NUT)"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+  tags:
+    - eud
+    - nut
+    - ups
+
+  vars:
+    # NUT driver for USB HID UPS devices (APC, CyberPower, SMS, Eaton, etc.)
+    nut_driver: "usbhid-ups"
+    nut_ups_name: "eud-ups"
+    # Shutdown threshold: battery percentage to trigger graceful poweroff
+    nut_battery_shutdown_pct: 20
+    # NUT mode: standalone (single UPS, single machine)
+    nut_mode: "standalone"
+
+  tasks:
+    - name: "Check if system is running Fedora Atomic (OSTree)"
+      ansible.builtin.stat:
+        path: /run/ostree-booted
+      register: ostree_booted
+
+    - name: "Install NUT (Network UPS Tools) via rpm-ostree"
+      ansible.builtin.command:
+        cmd: rpm-ostree install --idempotent --unchanged-exit-77 nut
+      register: nut_install
+      failed_when: nut_install.rc != 0 and nut_install.rc != 77
+      changed_when: nut_install.rc == 0
+      when: ostree_booted.stat.exists
+
+    - name: "Check if SatDump COPR repo is configured"
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/_copr_derisis13-SatDump.repo
+      register: satdump_copr_stat
+
+    - name: "Download SatDump COPR repository file"
+      ansible.builtin.get_url:
+        url: "https://copr.fedorainfracloud.org/coprs/derisis13/SatDump/repo/fedora-{{ ansible_facts['distribution_major_version'] }}/derisis13-SatDump-fedora-{{ ansible_facts['distribution_major_version'] }}.repo"
+        dest: /etc/yum.repos.d/_copr_derisis13-SatDump.repo
+        owner: root
+        group: root
+        mode: '0644'
+      when:
+        - ostree_booted.stat.exists
+        - not satdump_copr_stat.stat.exists
+      register: satdump_copr_add
+
+    - name: "Refresh rpm-ostree metadata after adding COPR"
+      ansible.builtin.command:
+        cmd: rpm-ostree refresh-md
+      when: satdump_copr_add is changed
+
+    - name: "Install SatDump via rpm-ostree (COPR)"
+      ansible.builtin.command:
+        cmd: rpm-ostree install --idempotent --unchanged-exit-77 SatDump
+      register: satdump_install
+      failed_when: satdump_install.rc != 0 and satdump_install.rc != 77
+      changed_when: satdump_install.rc == 0
+      when: ostree_booted.stat.exists
+
+    - name: "Ensure nut system group exists (Fedora standard GID 57)"
+      ansible.builtin.group:
+        name: nut
+        gid: 57
+        system: true
+        state: present
+
+    - name: "Ensure nut system user exists (Fedora standard UID 57)"
+      ansible.builtin.user:
+        name: nut
+        uid: 57
+        group: nut
+        system: true
+        shell: /bin/false
+        home: /run/nut
+        create_home: false
+        state: present
+
+    - name: "Ensure NUT configuration directory exists"
+      ansible.builtin.file:
+        path: /etc/ups
+        state: directory
+        owner: root
+        group: nut
+        mode: '0750'
+
+    - name: "Configure NUT mode (standalone)"
+      ansible.builtin.copy:
+        dest: /etc/ups/nut.conf
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          MODE={{ nut_mode }}
+        owner: root
+        group: nut
+        mode: '0640'
+
+    - name: "Configure UPS driver (ups.conf)"
+      ansible.builtin.copy:
+        dest: /etc/ups/ups.conf
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          # UPS connected via USB - auto-detected by usbhid-ups driver
+          [{{ nut_ups_name }}]
+              driver = {{ nut_driver }}
+              port = auto
+              desc = "No-break USB - Estação EUD"
+              # Polling interval in seconds
+              pollinterval = 15
+        owner: root
+        group: nut
+        mode: '0640'
+
+    - name: "Configure UPS monitor (upsmon.conf)"
+      ansible.builtin.copy:
+        dest: /etc/ups/upsmon.conf
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          # Monitor the local UPS as primary (powerdown when battery critical)
+          MONITOR {{ nut_ups_name }}@localhost 1 upsmon pass primary
+
+          # Minimum number of power sources to stay running
+          MINSUPPLIES 1
+
+          # Shutdown command
+          SHUTDOWNCMD "/usr/sbin/shutdown -h +0"
+
+          # How often to poll (seconds)
+          POLLFREQ 5
+          POLLFREQALERT 5
+
+          # Deadtime: seconds without contact before declaring UPS stale
+          DEADTIME 15
+
+          # Host synchronization timeout (standalone: 0 is fine)
+          HOSTSYNC 15
+
+          # Final delay before shutdown
+          FINALDELAY 5
+
+          # Notification flags: syslog + execute notifycmd
+          NOTIFYFLAG ONLINE     SYSLOG+WALL
+          NOTIFYFLAG ONBATT     SYSLOG+WALL+EXEC
+          NOTIFYFLAG LOWBATT    SYSLOG+WALL+EXEC
+          NOTIFYFLAG FSD        SYSLOG+WALL+EXEC
+          NOTIFYFLAG SHUTDOWN   SYSLOG+WALL
+
+          # Custom notification messages
+          NOTIFYMSG ONLINE    "EUD: No-break com energia da rede (AC restaurado)"
+          NOTIFYMSG ONBATT    "EUD: ALERTA - Operando na bateria do no-break!"
+          NOTIFYMSG LOWBATT   "EUD: CRÍTICO - Bateria baixa, shutdown iminente!"
+          NOTIFYMSG FSD       "EUD: Forced Shutdown - Desligamento de emergência!"
+          NOTIFYMSG SHUTDOWN  "EUD: Sistema desligando para preservar dados."
+        owner: root
+        group: nut
+        mode: '0640'
+
+    - name: "Configure upssched for battery threshold shutdown"
+      ansible.builtin.copy:
+        dest: /etc/ups/upssched.conf
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          CMDSCRIPT /usr/local/bin/eud-ups-handler.sh
+          PIPEFN /run/nut/upssched.pipe
+          LOCKFN /run/nut/upssched.lock
+
+          # When on battery, start a timer; when back online, cancel it
+          AT ONBATT * START-TIMER onbatt 30
+          AT ONLINE * CANCEL-TIMER onbatt
+          AT LOWBATT * EXECUTE lowbatt
+          AT FSD * EXECUTE forced-shutdown
+        owner: root
+        group: nut
+        mode: '0640'
+
+    - name: "Deploy EUD UPS handler script"
+      ansible.builtin.copy:
+        dest: /usr/local/bin/eud-ups-handler.sh
+        content: |
+          #!/usr/bin/env bash
+          # EUD UPS Handler - Managed by Ansible
+          # Called by upssched when battery events occur
+
+          case "$1" in
+              onbatt)
+                  # Check battery level from upsc
+                  BATTERY_PCT=$(upsc {{ nut_ups_name }}@localhost battery.charge 2>/dev/null || echo "100")
+                  if [ "${BATTERY_PCT}" -le {{ nut_battery_shutdown_pct }} ]; then
+                      logger -t eud-ups "CRITICAL: Battery at ${BATTERY_PCT}% (<= {{ nut_battery_shutdown_pct }}%). Initiating graceful shutdown."
+                      /usr/sbin/upsmon -c fsd
+                  else
+                      logger -t eud-ups "WARNING: On battery at ${BATTERY_PCT}%. Threshold: {{ nut_battery_shutdown_pct }}%."
+                  fi
+                  ;;
+              lowbatt)
+                  logger -t eud-ups "CRITICAL: Low battery signal from UPS. Forcing shutdown."
+                  /usr/sbin/upsmon -c fsd
+                  ;;
+              forced-shutdown)
+                  logger -t eud-ups "EMERGENCY: Forced Shutdown initiated."
+                  ;;
+              *)
+                  logger -t eud-ups "Unknown event: $1"
+                  ;;
+          esac
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "Check if NUT systemd services are available on booted deployment"
+      ansible.builtin.stat:
+        path: /usr/lib/systemd/system/nut-monitor.service
+      register: nut_service_stat
+
+    - name: "Enable and start NUT driver service"
+      ansible.builtin.systemd:
+        name: nut-driver-enumerator.service
+        state: started
+        enabled: true
+      when: nut_service_stat.stat.exists
+      failed_when: false
+
+    - name: "Enable and start NUT monitor service"
+      ansible.builtin.systemd:
+        name: nut-monitor.service
+        state: started
+        enabled: true
+      when: nut_service_stat.stat.exists
+      failed_when: false
+
+    - name: "Notify NUT reboot required (if newly installed)"
+      ansible.builtin.debug:
+        msg:
+          - "================================================================="
+          - "AVISO: NUT (Network UPS Tools) foi instalado via rpm-ostree."
+          - "Reinicie o computador para ativar o pacote layered."
+          - "Após o reboot, conecte o no-break USB e execute:"
+          - "  sudo upsdrvctl start"
+          - "  sudo systemctl start nut-driver-enumerator nut-monitor"
+          - "  upsc {{ nut_ups_name }}@localhost"
+          - "================================================================="
+      when: nut_install is defined and nut_install is changed
+
+# ==============================================================================
+# Play 4: EUD User Services (Ollama, Flatpaks, TileServer GL)
+# Runs with standard user privileges (become: false).
+# ==============================================================================
+- name: "EUD User Services - AI, Radio & Maps"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: false
+  tags:
+    - eud
+    - ollama
+    - flatpak
+    - maps
+    - sdr
+
+  vars:
+    user_home: "{{ ansible_facts['env']['HOME'] }}"
+    xdg_runtime_dir: "{{ ansible_facts['env']['XDG_RUNTIME_DIR'] | default('/run/user/' ~ ansible_facts['user_uid']) }}"
+
+    # Ollama configuration
+    ollama_image: "docker.io/ollama/ollama:latest"
+    ollama_container_name: "ollama"
+    ollama_models_dir: "{{ user_home }}/.ollama/models"
+    ollama_port: 11434
+    ollama_default_model: "llama3:8b"
+
+    # TileServer GL configuration
+    tileserver_image: "docker.io/maptiler/tileserver-gl:latest"
+    tileserver_container_name: "tileserver-gl"
+    tileserver_data_dir: "{{ user_home }}/dados/maps"
+    tileserver_port: 8080
+
+    # Flatpak SDR/Radio/Maps applications
+    flatpak_apps:
+      - { id: "dk.gqrx.gqrx",            desc: "Gqrx SDR Receiver" }
+      - { id: "com.chirpmyradio.chirp",    desc: "CHIRP (Programação HT)" }
+
+  tasks:
+    # ------------------------------------------------------------------
+    # 1. Flatpak SDR/Radio Applications
+    # ------------------------------------------------------------------
+    - name: "Ensure Flathub remote is configured"
+      ansible.builtin.command:
+        cmd: flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      register: flathub_add
+      changed_when: "'already exists' not in flathub_add.stderr"
+      tags:
+        - flatpak
+        - sdr
+
+    - name: "Install SDR/Radio Flatpak applications"
+      community.general.flatpak:
+        name: "{{ item.id }}"
+        state: present
+        method: system
+      loop: "{{ flatpak_apps }}"
+      loop_control:
+        label: "{{ item.desc }}"
+      tags:
+        - flatpak
+        - sdr
+
+    - name: "Install QGIS (stable branch) via Flatpak"
+      ansible.builtin.command:
+        cmd: flatpak install --system --noninteractive flathub org.qgis.qgis//stable
+      register: qgis_install
+      failed_when: qgis_install.rc != 0 and 'already installed' not in qgis_install.stderr
+      changed_when: qgis_install.rc == 0 and 'already installed' not in qgis_install.stderr
+      tags:
+        - flatpak
+        - sdr
+
+    # ------------------------------------------------------------------
+    # 2. Ollama Local AI (Podman Rootless + Quadlet)
+    # ------------------------------------------------------------------
+    - name: "Ensure Ollama model storage directory exists"
+      ansible.builtin.file:
+        path: "{{ ollama_models_dir }}"
+        state: directory
+        mode: '0755'
+      tags:
+        - ollama
+
+    - name: "Ensure systemd user containers directory exists"
+      ansible.builtin.file:
+        path: "{{ user_home }}/.config/containers/systemd"
+        state: directory
+        mode: '0755'
+      tags:
+        - ollama
+        - maps
+
+    - name: "Deploy Ollama Quadlet container unit"
+      ansible.builtin.copy:
+        dest: "{{ user_home }}/.config/containers/systemd/ollama.container"
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          # Ollama Local AI - Quadlet Container Definition
+          [Unit]
+          Description=Ollama Local AI Server (EUD)
+          After=default.target
+
+          [Container]
+          Image={{ ollama_image }}
+          ContainerName={{ ollama_container_name }}
+          PublishPort={{ ollama_port }}:11434
+          Volume={{ ollama_models_dir }}:/root/.ollama:Z
+          AutoUpdate=registry
+
+          [Service]
+          Restart=on-failure
+          RestartSec=10
+          TimeoutStartSec=300
+
+          [Install]
+          WantedBy=default.target
+        mode: '0644'
+      register: ollama_quadlet
+      tags:
+        - ollama
+
+    - name: "Reload systemd user daemon (Ollama Quadlet)"
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      environment:
+        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
+      when: ollama_quadlet is changed
+      tags:
+        - ollama
+
+    - name: "Enable and start Ollama container service"
+      ansible.builtin.systemd:
+        name: ollama.service
+        scope: user
+        state: started
+        enabled: true
+      environment:
+        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
+      tags:
+        - ollama
+
+    - name: "Wait for Ollama API to be ready"
+      ansible.builtin.uri:
+        url: "http://localhost:{{ ollama_port }}/api/tags"
+        method: GET
+        status_code: 200
+      register: ollama_health
+      retries: 12
+      delay: 10
+      until: ollama_health.status == 200
+      tags:
+        - ollama
+
+    - name: "Check if Ollama model {{ ollama_default_model }} is present"
+      ansible.builtin.command:
+        cmd: podman exec {{ ollama_container_name }} ollama list
+      register: ollama_list
+      changed_when: false
+      tags:
+        - ollama
+
+    - name: "Pull default Ollama model ({{ ollama_default_model }})"
+      ansible.builtin.command:
+        cmd: podman exec {{ ollama_container_name }} ollama pull {{ ollama_default_model }}
+      when: ollama_default_model not in ollama_list.stdout
+      tags:
+        - ollama
+
+    # ------------------------------------------------------------------
+    # 3. TileServer GL (Mapas Offline via Podman Quadlet)
+    # ------------------------------------------------------------------
+    - name: "Ensure TileServer GL data directory exists"
+      ansible.builtin.file:
+        path: "{{ tileserver_data_dir }}"
+        state: directory
+        mode: '0755'
+      tags:
+        - maps
+
+    - name: "Deploy TileServer GL Quadlet container unit"
+      ansible.builtin.copy:
+        dest: "{{ user_home }}/.config/containers/systemd/tileserver-gl.container"
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          # TileServer GL - Offline Maps Server (EUD)
+          [Unit]
+          Description=TileServer GL - Offline Maps (EUD)
+          After=default.target
+
+          [Container]
+          Image={{ tileserver_image }}
+          ContainerName={{ tileserver_container_name }}
+          User=root
+          PublishPort={{ tileserver_port }}:8080
+          Volume={{ tileserver_data_dir }}:/data:Z
+          AutoUpdate=registry
+
+          [Service]
+          Restart=on-failure
+          RestartSec=10
+          TimeoutStartSec=120
+
+          [Install]
+          WantedBy=default.target
+        mode: '0644'
+      register: tileserver_quadlet
+      tags:
+        - maps
+
+    - name: "Reload systemd user daemon (TileServer Quadlet)"
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      environment:
+        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
+      when: tileserver_quadlet is changed
+      tags:
+        - maps
+
+    - name: "Enable and start TileServer GL container service"
+      ansible.builtin.systemd:
+        name: tileserver-gl.service
+        scope: user
+        state: started
+        enabled: true
+      environment:
+        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
+      tags:
+        - maps
