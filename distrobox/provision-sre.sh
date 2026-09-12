@@ -51,7 +51,7 @@ dnf install -y \
     ansible ansible-lint opentofu terraform packer \
     docker-ce-cli docker-compose-plugin kubernetes-client helm age \
     bind-utils nmap-ncat tcpdump strace lsof socat iperf3 sysstat iproute procps-ng \
-    bubblewrap zstd
+    bubblewrap zstd lynis
 
 # 3. Python Ecosystem: Astral 'uv' & Ferramentas
 echo "==> [2/6] Configurando uv e pipx..."
@@ -115,6 +115,19 @@ if [ ! -f /usr/local/bin/gitleaks ]; then
     echo "==> Instalando Gitleaks..."
     GITLEAKS_TAG=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name 2>/dev/null || echo "v8.30.1")
     curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_TAG}/gitleaks_${GITLEAKS_TAG#v}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks && chmod +x /usr/local/bin/gitleaks || true
+fi
+
+# Syft (SBOM Generation)
+if [ ! -f /usr/local/bin/syft ]; then
+    echo "==> Instalando Syft..."
+    curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin || true
+fi
+
+# Cosign (Container Signing & Verification)
+if [ ! -f /usr/local/bin/cosign ]; then
+    echo "==> Instalando Cosign..."
+    COSIGN_TAG=$(curl -s https://api.github.com/repos/sigstore/cosign/releases/latest | jq -r .tag_name 2>/dev/null || echo "v2.4.1")
+    curl -fsSL -o /usr/local/bin/cosign "https://github.com/sigstore/cosign/releases/download/${COSIGN_TAG}/cosign-linux-amd64" && chmod +x /usr/local/bin/cosign || true
 fi
 
 
