@@ -10,11 +10,6 @@
   become: true
   tags:
     - system
-    - nvidia
-    - secureboot
-    - performance
-    - security
-    - sysctl
 
   vars:
     # Kernel arguments required for NVIDIA proprietary driver
@@ -48,6 +43,9 @@
       when:
         - ostree_booted.stat.exists
         - nvidia_gpu_check.rc == 0
+      tags:
+        - nvidia
+        - secureboot
       block:
         # 1. RPM Fusion Repositories
         - name: "Check if RPM Fusion repository package is installed"
@@ -68,9 +66,17 @@
           changed_when: rpmfusion_install.rc == 0
 
         # 1.5 Ensure MOK key generation and RPM packaging tools are available on host
+        - name: "Check if akmods and rpm-build tooling are already installed"
+          ansible.builtin.command:
+            cmd: rpm -q akmods rpm-build
+          register: build_tools_check
+          failed_when: false
+          changed_when: false
+
         - name: "Ensure akmods and rpm-build tooling are available on host"
           ansible.builtin.command:
-            cmd: rpm-ostree install --apply-live --idempotent --unchanged-exit-77 -y akmods rpm-build
+            cmd: rpm-ostree install --idempotent --unchanged-exit-77 -y akmods rpm-build
+          when: build_tools_check.rc != 0
           register: build_tools_install
           failed_when: build_tools_install.rc != 0 and build_tools_install.rc != 77
           changed_when: build_tools_install.rc == 0
@@ -519,12 +525,39 @@
         state: absent
       when: bash_aliases_stat.stat.exists and not bash_aliases_stat.stat.islnk
 
+    - name: "Check if .ssh/config is already a symlink"
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+      register: ssh_config_stat
+
+    - name: "Prepare home directory for Stow (Remove conflicting regular file .ssh/config)"
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+        state: absent
+      when: ssh_config_stat.stat.exists and not ssh_config_stat.stat.islnk
+
     - name: "Apply dotfiles via GNU Stow"
       shell: "stow --dir={{ dotfiles_dir }} --target={{ ansible_facts['env']['HOME'] }} --restow {{ item }}"
       with_items:
         - "tmux"
         - "bash"
         - "starship"
+        - "ssh"
+
+    - name: "Enforce strict permissions on sensitive directories and files"
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/{{ item.path }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: ".ssh", mode: "0700" }
+        - { path: ".ssh/config", mode: "0600" }
+        - { path: ".aws", mode: "0700" }
+        - { path: ".config/sops", mode: "0700" }
+      failed_when: false
+      tags:
+        - security
+        - permissions
+
 
 # ==============================================================================
 # Play 3: EUD System Configuration (Network UPS Tools)

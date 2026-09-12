@@ -28,3 +28,21 @@
     owner: root
     group: root
     mode: '0644'
+
+- name: "Ensure /etc/systemd/resolved.conf.d directory exists"
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "Deploy DNS security hardening (/etc/systemd/resolved.conf.d/99-dns-security.conf)"
+  ansible.builtin.template:
+    src: 99-dns-security.conf.j2
+    dest: /etc/systemd/resolved.conf.d/99-dns-security.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: "restart systemd-resolved"
+

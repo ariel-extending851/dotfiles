@@ -1,0 +1,10 @@
+# ==============================================================================
+# 99-dns-security.conf - Managed by system_tuning Ansible Role
+# Hardening for systemd-resolved (Anti-LLMNR Poisoning, DoT & DNSSEC)
+# ==============================================================================
+
+[Resolve]
+LLMNR=no
+MulticastDNS=resolve
+DNSSEC=allow-downgrade
+DNSOverTLS=opportunistic

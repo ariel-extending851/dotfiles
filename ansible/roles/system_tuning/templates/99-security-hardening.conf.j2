@@ -7,6 +7,8 @@
 kernel.kptr_restrict = {{ system_tuning_kptr_restrict }}
 kernel.dmesg_restrict = {{ system_tuning_dmesg_restrict }}
 kernel.yama.ptrace_scope = {{ system_tuning_yama_ptrace_scope }}
+fs.suid_dumpable = 0
+kernel.unprivileged_bpf_disabled = 1
 
 # --- File System Protection ---
 fs.protected_hardlinks = 1
@@ -17,6 +19,10 @@ fs.protected_regular = 2
 # --- Network Hardening (Anti-Spoofing & DoS Protection) ---
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
+
+# Log packets with impossible or forged addresses (Martian logging)
+net.ipv4.conf.all.log_martians = 1
+net.ipv4.conf.default.log_martians = 1
 
 # Ignore broadcast ICMP echo requests
 net.ipv4.icmp_echo_ignore_broadcasts = 1
