@@ -62,29 +62,27 @@
       loop: "{{ dotfiles_stat.results }}"
 
     # --------------------------------------------------------------------------
-    # 4. SRE Productivity CLI Tools Verification
+    # 4. Host Minimal Essential Bootstrap Tools Verification
     # --------------------------------------------------------------------------
-    - name: "Check availability of CLI tools"
+    - name: "Check availability of minimal essential Host tools"
       ansible.builtin.command:
         cmd: "{{ 'tmux -V' if item == 'tmux' else item ~ ' --version' }}"
       register: cli_tools_check
       loop:
-        - starship
-        - lazygit
-        - lazydocker
         - tmux
-        - zoxide
-        - eza
-        - bat
-        - rg
+        - stow
+        - mise
+        - distrobox
+        - jq
+        - bw
       changed_when: false
 
-    - name: "Assert all CLI tools executed successfully"
+    - name: "Assert minimal essential Host tools executed successfully"
       ansible.builtin.assert:
         that:
           - item.rc == 0
-        fail_msg: "FALHA: A ferramenta {{ item.item }} não está instalada ou falhou ao executar!"
-        success_msg: "OK: Ferramenta {{ item.item }} operacional."
+        fail_msg: "FALHA: A ferramenta essencial do host {{ item.item }} não está instalada ou falhou ao executar!"
+        success_msg: "OK: Ferramenta essencial do host {{ item.item }} operacional."
       loop: "{{ cli_tools_check.results }}"
 
     # --------------------------------------------------------------------------
@@ -229,3 +227,204 @@
         fail_msg: "AVISO: nut-monitor.service não está ativo. Conecte o no-break USB e reinicie os serviços."
         success_msg: "OK: NUT monitor ativo, protegendo contra falha de energia."
       when: nut_installed.rc == 0
+      ignore_errors: true
+
+    # --------------------------------------------------------------------------
+    # 10. Distrobox SRE & Platform Engineering Toolkit Verification
+    # --------------------------------------------------------------------------
+    - name: "Check if Distrobox CLI is available on host"
+      ansible.builtin.command:
+        cmd: distrobox --version
+      register: distrobox_cmd
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert Distrobox CLI is installed"
+      ansible.builtin.assert:
+        that:
+          - distrobox_cmd.rc == 0
+        fail_msg: "FALHA: Distrobox não encontrado no PATH!"
+        success_msg: "OK: Distrobox CLI disponível no host."
+
+    - name: "Check if sre-toolbox Distrobox container exists"
+      ansible.builtin.command:
+        cmd: distrobox list
+      register: distrobox_list_verify
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert sre-toolbox container is created"
+      ansible.builtin.assert:
+        that:
+          - "'sre-toolbox' in distrobox_list_verify.stdout"
+        fail_msg: "AVISO: Container sre-toolbox não encontrado. Execute 'mise run apply:distrobox'."
+        success_msg: "OK: Container sre-toolbox presente no Distrobox."
+
+    - name: "Validate SRE CLI tools inside sre-toolbox container"
+      ansible.builtin.command:
+        cmd: "distrobox enter sre-toolbox --no-tty -- {{ item.cmd }}"
+      loop:
+        - { name: "OpenTofu", cmd: "tofu --version" }
+        - { name: "Terraform", cmd: "terraform -version" }
+        - { name: "Terragrunt", cmd: "terragrunt --version" }
+        - { name: "Ansible", cmd: "ansible --version" }
+        - { name: "Docker CLI", cmd: "docker --version" }
+        - { name: "Kubectl", cmd: "kubectl version --client" }
+        - { name: "Helm", cmd: "helm version" }
+        - { name: "K9s", cmd: "k9s version" }
+        - { name: "Kind", cmd: "kind version" }
+        - { name: "Trivy", cmd: "trivy --version" }
+        - { name: "Golang", cmd: "go version" }
+        - { name: "Python3", cmd: "python3 --version" }
+        - { name: "Astral uv", cmd: "uv --version" }
+        - { name: "AWS CLI", cmd: "aws --version" }
+        - { name: "Google Cloud CLI", cmd: "gcloud --version" }
+        - { name: "Azure CLI", cmd: "az --version" }
+        - { name: "Neovim", cmd: "nvim --version" }
+        - { name: "Eza", cmd: "eza --version" }
+        - { name: "Bat", cmd: "bat --version" }
+        - { name: "Zoxide", cmd: "zoxide --version" }
+        - { name: "Fd", cmd: "fd --version" }
+        - { name: "Dust", cmd: "dust --version" }
+        - { name: "Procs", cmd: "procs --version" }
+        - { name: "Btop", cmd: "btop --version" }
+        - { name: "Delta", cmd: "delta --version" }
+        - { name: "Starship", cmd: "starship --version" }
+        - { name: "Lazygit", cmd: "lazygit --version" }
+        - { name: "Lazydocker", cmd: "lazydocker --version" }
+        - { name: "Tmux", cmd: "tmux -V" }
+        - { name: "Bubblewrap", cmd: "bwrap --version" }
+        - { name: "ai-jail", cmd: "ai-jail --version" }
+        - { name: "Crush", cmd: "crush --version" }
+        - { name: "OpenCode", cmd: "opencode --version" }
+        - { name: "Claude Code", cmd: "claude --version" }
+        - { name: "AIChat", cmd: "aichat --version" }
+        - { name: "Ollama Client", cmd: "ollama --version" }
+        - { name: "Antigravity CLI", cmd: "agy --version" }
+      loop_control:
+        label: "{{ item.name }}"
+      register: sre_tools_verify
+      changed_when: false
+      failed_when: false
+      when: "'sre-toolbox' in distrobox_list_verify.stdout"
+
+    - name: "Assert SRE tools inside container executed successfully"
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+        fail_msg: "AVISO: Ferramenta {{ item.item.name }} falhou dentro do sre-toolbox!"
+        success_msg: "OK: Ferramenta {{ item.item.name }} operacional dentro do sre-toolbox."
+      loop: "{{ sre_tools_verify.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when:
+        - "'sre-toolbox' in distrobox_list_verify.stdout"
+        - sre_tools_verify is defined
+        - item.rc is defined
+
+    # --------------------------------------------------------------------------
+    # 11. Host Minimalism & Dotfiles Verification
+    # --------------------------------------------------------------------------
+    - name: "Verify Host Minimalism (Ensure non-essential tools are not on host)"
+      ansible.builtin.command:
+        cmd: "which {{ item }}"
+      loop:
+        - eza
+        - lazygit
+        - lazydocker
+        - nvim
+      register: host_minimalism_check
+      failed_when: false
+      changed_when: false
+
+    - name: "Assert non-essential tools are purged from host"
+      ansible.builtin.assert:
+        that:
+          - item.rc != 0
+        fail_msg: "AVISO: {{ item.item }} ainda está instalado no Host. O Host deve permanecer minimalista!"
+        success_msg: "OK: {{ item.item }} isolado fora do Host (conforme arquitetura minimalista)."
+      loop: "{{ host_minimalism_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Verify LazyVim and Tmux dotfiles exist on host"
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+      loop:
+        - ".config/nvim/init.lua"
+        - ".tmux.conf"
+      register: dotfiles_stat
+
+    - name: "Assert LazyVim and Tmux configuration files exist"
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "AVISO: Arquivo {{ item.item }} não encontrado no HOME!"
+        success_msg: "OK: Configuração {{ item.item }} stowed no HOME."
+      loop: "{{ dotfiles_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # --------------------------------------------------------------------------
+    # 12. Multi-Layer Security & Network Hardening Verification
+    # --------------------------------------------------------------------------
+    - name: "Verify SELinux mode on Host"
+      ansible.builtin.command:
+        cmd: sestatus
+      register: sestatus_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert SELinux is in Enforcing mode"
+      ansible.builtin.assert:
+        that:
+          - "'Current mode:                   enforcing' in sestatus_check.stdout"
+        fail_msg: "FALHA: SELinux não está em modo Enforcing no host!"
+        success_msg: "OK: SELinux ativo e em modo Enforcing."
+
+    - name: "Verify firewalld service status"
+      ansible.builtin.command:
+        cmd: systemctl is-active firewalld
+      register: firewalld_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert firewalld is active"
+      ansible.builtin.assert:
+        that:
+          - firewalld_status.stdout == "active"
+        fail_msg: "FALHA: firewalld não está ativo!"
+        success_msg: "OK: firewalld ativo e protegendo a interface física."
+
+    - name: "Check SSH client config and directory permissions"
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+      register: ssh_config_verify
+
+    - name: "Assert SSH client config is a managed Stow symlink"
+      ansible.builtin.assert:
+        that:
+          - ssh_config_verify.stat.exists
+          - ssh_config_verify.stat.islnk
+        fail_msg: "FALHA: ~/.ssh/config não existe ou não é um symlink do Stow!"
+        success_msg: "OK: ~/.ssh/config configurado com hardening e gerenciado pelo Stow."
+
+    - name: "Check Gitleaks inside sre-toolbox container"
+      ansible.builtin.command:
+        cmd: distrobox enter sre-toolbox --no-tty -- gitleaks version
+      register: gitleaks_check
+      changed_when: false
+      failed_when: false
+      when: "'sre-toolbox' in distrobox_list_verify.stdout"
+
+    - name: "Assert Gitleaks is installed and operational inside sre-toolbox"
+      ansible.builtin.assert:
+        that:
+          - gitleaks_check.rc == 0
+        fail_msg: "AVISO: Gitleaks não encontrado dentro do sre-toolbox!"
+        success_msg: "OK: Gitleaks operacional para auditoria estática de segredos no sre-toolbox."
+      when:
+        - "'sre-toolbox' in distrobox_list_verify.stdout"
+        - gitleaks_check is defined
+        - gitleaks_check.rc is defined
+

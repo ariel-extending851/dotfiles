@@ -27,6 +27,11 @@ run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --
 description = "Apply root system tuning and hardening"
 run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags system,sysctl,performance,security -K"
 
+[tasks."apply:hardening"]
+description = "Apply network, DNS and firewall security hardening only"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags security,sysctl,performance,firewall -K"
+
+
 [tasks.test]
 description = "Run complete test suite (syntax and host verification)"
 depends = ["lint", "test:syntax", "verify"]
@@ -42,3 +47,29 @@ run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --
 [tasks."apply:eud:nut"]
 description = "Apply NUT/UPS power resilience (requires root)"
 run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags nut -K"
+
+[tasks."distrobox:create"]
+description = "Assemble the SRE Distrobox toolbox container"
+run = "distrobox assemble create --file distrobox/distrobox.ini"
+
+[tasks."distrobox:enter"]
+description = "Enter the SRE Distrobox toolbox interactive shell"
+run = "distrobox enter sre-toolbox"
+
+[tasks."distrobox:rm"]
+description = "Remove the SRE Distrobox container"
+run = "distrobox rm -f sre-toolbox"
+
+[tasks."apply:distrobox"]
+description = "Provision SRE Distrobox environment via Ansible"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags distrobox"
+
+[tasks."provision:distrobox"]
+description = "Re-run SRE Distrobox provisioning script directly inside container"
+run = "distrobox enter sre-toolbox --no-tty -- sudo bash /var/home/agfonseca/Projects/dotfiles/distrobox/provision-sre.sh"
+
+[tasks.bootstrap]
+description = "Run full zero-to-hero workstation bootstrap (Fedora Atomic)"
+run = "./bootstrap.sh"
+
+
