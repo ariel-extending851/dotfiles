@@ -557,6 +557,20 @@
       tags:
         - security
         - permissions
+    - name: "Ensure Tmux Plugin Manager (TPM) is installed"
+      ansible.builtin.git:
+        repo: "https://github.com/tmux-plugins/tpm"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm"
+        version: master
+        depth: 1
+      failed_when: false
+
+    - name: "Install Tmux plugins via TPM"
+      ansible.builtin.command:
+        cmd: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm/bin/install_plugins"
+      failed_when: false
+      changed_when: false
+
 
 
 # ==============================================================================
