@@ -1,0 +1,42 @@
+{
+  "name": "Hardened SRE & Platform Engineering Workspace",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "remoteUser": "vscode",
+
+  // Security Hardening: Principle of Least Privilege
+  "runArgs": [
+    // Drop all root Linux capabilities by default
+    "--cap-drop=ALL",
+    // Prevent privilege escalation attacks
+    "--security-opt=no-new-privileges:true",
+    // Isolated user-space networking
+    "--net=slirp4netns"
+  ],
+
+  // Defensive credential mounts: strictly Read-Only (:ro)
+  "mounts": [
+    // Mount AWS credentials in read-only mode if they exist on host
+    "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind,readonly",
+    // Mount SOPS age keys in read-only mode
+    "source=${localEnv:HOME}/.config/sops,target=/home/vscode/.config/sops,type=bind,readonly"
+  ],
+
+  // Environment protection
+  "containerEnv": {
+    "HISTCONTROL": "ignoreboth:erasedups",
+    "HISTIGNORE": "*token*:*secret*:*password*:*key*:*PASS*:*TOKEN*:*SECRET*:*KEY*:*sudo *:export *"
+  },
+
+  // Security tools and linters inside devcontainer
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "hashicorp.terraform",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "zricethezav.gitleaks"
+      ]
+    }
+  }
+}
