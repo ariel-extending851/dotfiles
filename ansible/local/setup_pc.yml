@@ -454,26 +454,40 @@
       tags:
         - devpod
 
-    # 4. Interface and Productivity Tools
-    - name: "Install productivity tools on Host via Brew"
+    # 4. Minimal Essential Bootstrap Tools on Host (Hardened & Minimalist)
+    - name: "Install minimal essential bootstrap tools on Host via Brew"
       shell: "brew install {{ item }}"
       loop:
-        - tmux # Terminal Multiplexer
-        - stow # Dotfile Manager
-        - zoxide # Smarter cd
-        - fzf # Fuzzy Finder
-        - jq # JSON Processor
-        - eza # Modern ls
-        - bat # Modern cat
-        - ripgrep # Fast grep
-        - fd # Fast find
-        - bitwarden-cli # CLI Password Manager
-        - starship # Fast cross-shell prompt
-        - lazygit # Simple terminal UI for git
-        - lazydocker # Terminal UI for container management
-        - mise # Polyglot runtime and tool manager
-      register: brew_result
-      changed_when: "'already installed' not in brew_result.stderr"
+        - stow          # Dotfile Symlink Manager
+        - distrobox     # Containerized Environment Manager
+        - mise          # Task and Orchestration Manager
+        - bitwarden-cli # CLI Password Manager (SSH key management)
+        - jq            # JSON Processor
+        - tmux          # Terminal Multiplexer
+      register: brew_install_result
+      changed_when: "'already installed' not in brew_install_result.stderr"
+
+    - name: "Purge non-essential productivity and dev tools from Host Brew"
+      shell: "brew uninstall --ignore-dependencies {{ item }} 2>/dev/null || true"
+      loop:
+        - eza
+        - bat
+        - zoxide
+        - lazygit
+        - lazydocker
+        - fd
+        - ripgrep
+        - nmap
+        - pipx
+        - gh
+        - fzf
+        - starship
+      register: brew_purge_result
+      changed_when: "'Uninstalling' in brew_purge_result.stdout"
+
+    - name: "Run Homebrew autoremove and cleanup on Host"
+      shell: "brew autoremove -q && brew cleanup -q"
+      changed_when: false
 
     # 4.1 DevPod (Linux Binary - Correct Method)
     - name: "Install DevPod via Direct Download"
@@ -617,6 +631,20 @@
       changed_when: "'changed' in git_signing.stdout"
       ignore_errors: true
 
+    # 7.4 Ensure .bashrc loads Homebrew defensively (ignored inside Distrobox/containers)
+    - name: "Remove legacy unconditional Homebrew load from .bashrc"
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+        line: 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
+        state: absent
+
+    - name: "Configure .bashrc to load Homebrew defensively"
+      ansible.builtin.lineinfile:
+        path: "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+        line: '[ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
+        state: present
+        create: yes
+
     # 7.5 Ensure .bashrc loads .bash_aliases
     - name: "Configure .bashrc to load aliases"
       lineinfile:
@@ -631,7 +659,7 @@
         path: "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
       register: bash_aliases_stat
 
-    - name: "Prepare home directory for Stow (Remove conflicting regular file)"
+    - name: "Prepare home directory for Stow (Remove conflicting regular file .bash_aliases)"
       ansible.builtin.file:
         path: "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
         state: absent

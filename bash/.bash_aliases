@@ -18,13 +18,35 @@ if [ -z "$DOCKER_HOST" ] && [ -S "/run/user/$(id -u)/podman/podman.sock" ]; then
   export DOCKER_HOST="unix:///run/user/$(id -u)/podman/podman.sock"
 fi
 
+# --- Distrobox SRE / Platform Engineering Sandbox ---
+alias sre='distrobox enter sre-toolbox'
+alias dbx='distrobox'
+
 # --- Backup ---
 alias backup-now='sudo btrbk -c /etc/btrbk/btrbk.conf run && $HOME/backup-data-ext4.sh'
 
 # --- SSH Key unlock ---
 alias unlock-ssh='export BW_SESSION=$(bw unlock --raw) && eval $(ssh-agent -s) && bw get item Omarchy-PC | jq -r ".sshKey.privateKey" | ssh-add -'
 
-# --- Modern Unix Tools ---
+# --- SOPS Age Key Restore from Bitwarden ---
+alias restore-sops='export BW_SESSION=$(bw unlock --raw) && mkdir -p ~/.config/sops/age && bw get item "SOPS-Age-Key" | jq -r ".notes" > ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.txt && echo "✓ Chave SOPS Age restaurada em ~/.config/sops/age/keys.txt."'
+
+
+# --- FZF Integration ---
+if command -v fzf &>/dev/null; then
+  eval "$(fzf --bash 2>/dev/null || true)"
+  export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --inline-info"
+fi
+
+# --- Default Editor (Neovim) ---
+if command -v nvim &>/dev/null; then
+  export EDITOR='nvim'
+  export VISUAL='nvim'
+  alias vim='nvim'
+  alias v='nvim'
+fi
+
+# --- Modern Unix & Rust CLI Tools ---
 
 # Zoxide (cd replacement)
 if command -v zoxide &>/dev/null; then
@@ -35,17 +57,35 @@ fi
 # Eza (ls replacement)
 if command -v eza &>/dev/null; then
   alias ls='eza --icons --git --group-directories-first'
-  alias ll='eza --icons --git --header --long --group-directories-first'
+  alias ll='eza -lh --icons --git --group-directories-first'
+  alias la='eza -lha --icons --git --group-directories-first'
+  alias lt='eza --tree --level=2 --icons'
 fi
 
 # Bat (cat replacement)
 if command -v bat &>/dev/null; then
-  alias cat='bat'
+  alias cat='bat --paging=never'
+  export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 fi
 
 # Ripgrep (grep replacement)
 if command -v rg &>/dev/null; then
   alias grep='rg'
+fi
+
+# Procs (ps replacement)
+if command -v procs &>/dev/null; then
+  alias ps='procs'
+fi
+
+# Dust (du replacement)
+if command -v dust &>/dev/null; then
+  alias du='dust'
+fi
+
+# Btop (top replacement)
+if command -v btop &>/dev/null; then
+  alias top='btop'
 fi
 
 # --- DevOps & Cloud Aliases ---
@@ -110,6 +150,25 @@ alias lg='lazygit'
 alias prw='prowler'
 alias ckv='checkov'
 alias khunt='kube-hunter'
+alias scan-secrets='gitleaks detect -v'
+alias scan-iac='checkov -d .'
+alias scan-vuln='trivy fs .'
+
+# --- Shell History Hardening (Anti-Credential Leak) ---
+export HISTCONTROL=ignoreboth:erasedups
+export HISTSIZE=10000
+export HISTFILESIZE=20000
+export HISTIGNORE="*token*:*secret*:*password*:*key*:*PASS*:*TOKEN*:*SECRET*:*KEY*:*sudo *:export *:bw *"
+
+
+# --- AI Ecosystem & Sandboxing (ai-jail) ---
+alias jail='ai-jail'
+alias jclaude='ai-jail --agent-state claude'
+alias jopencode='ai-jail opencode'
+alias jcrush='ai-jail crush'
+alias jagy='ai-jail agy'
+alias ai='aichat'
+export OLLAMA_HOST='http://localhost:11434'
 
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
