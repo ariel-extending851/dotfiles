@@ -12,3 +12,5 @@ __pycache__/
 *.swp
 *~
 .mise.local.toml
+.ai-jail
+

@@ -38,6 +38,61 @@
       register: nvidia_gpu_check
       failed_when: false
       changed_when: false
+    # 8.5 Antigravity CLI Local Availability
+    - name: "Ensure ~/.local/bin directory exists"
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        state: directory
+        mode: '0755'
+
+    - name: "Check if antigravity-cli is installed via Homebrew"
+      ansible.builtin.stat:
+        path: "/home/linuxbrew/.linuxbrew/bin/antigravity"
+      register: brew_antigravity_stat
+
+    - name: "Ensure antigravity and agy are linked in ~/.local/bin"
+      ansible.builtin.file:
+        src: "/home/linuxbrew/.linuxbrew/bin/antigravity"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - antigravity
+        - agy
+      when: brew_antigravity_stat.stat.exists
+
+    # --------------------------------------------------------------------------
+    # 9. Distrobox SRE / DevOps / Platform Engineering Sandbox
+    # --------------------------------------------------------------------------
+    - name: "Ensure SRE Distrobox provisioning script is executable"
+      ansible.builtin.file:
+        path: "{{ dotfiles_dir }}/distrobox/provision-sre.sh"
+        mode: '0755'
+      tags:
+        - distrobox
+        - devops
+        - sre
+
+    - name: "Check if SRE Distrobox container already exists"
+      ansible.builtin.command:
+        cmd: distrobox list
+      register: distrobox_list_check
+      changed_when: false
+      tags:
+        - distrobox
+        - devops
+        - sre
+
+    - name: "Assemble SRE Distrobox container (if missing)"
+      ansible.builtin.command:
+        cmd: distrobox assemble create --file {{ dotfiles_dir }}/distrobox/distrobox.ini
+      when: "'sre-toolbox' not in distrobox_list_check.stdout"
+      register: distrobox_assemble_result
+      tags:
+        - distrobox
+        - devops
+        - sre
+
 
     - name: "Manage NVIDIA & Secure Boot on Fedora Atomic"
       when:
@@ -348,6 +403,8 @@
     - brew
     - devpod
     - podman
+    - distrobox
+    - sre
   vars:
     # Modern syntax to avoid Warnings
     workspace_dir: "{{ ansible_facts['env']['HOME'] }}/Projects"
@@ -432,6 +489,61 @@
       register: devpod_providers_check
       failed_when: false
       changed_when: false
+    # 8.5 Antigravity CLI Local Availability
+    - name: "Ensure ~/.local/bin directory exists"
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        state: directory
+        mode: '0755'
+
+    - name: "Check if antigravity-cli is installed via Homebrew"
+      ansible.builtin.stat:
+        path: "/home/linuxbrew/.linuxbrew/bin/antigravity"
+      register: brew_antigravity_stat
+
+    - name: "Ensure antigravity and agy are linked in ~/.local/bin"
+      ansible.builtin.file:
+        src: "/home/linuxbrew/.linuxbrew/bin/antigravity"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - antigravity
+        - agy
+      when: brew_antigravity_stat.stat.exists
+
+    # --------------------------------------------------------------------------
+    # 9. Distrobox SRE / DevOps / Platform Engineering Sandbox
+    # --------------------------------------------------------------------------
+    - name: "Ensure SRE Distrobox provisioning script is executable"
+      ansible.builtin.file:
+        path: "{{ dotfiles_dir }}/distrobox/provision-sre.sh"
+        mode: '0755'
+      tags:
+        - distrobox
+        - devops
+        - sre
+
+    - name: "Check if SRE Distrobox container already exists"
+      ansible.builtin.command:
+        cmd: distrobox list
+      register: distrobox_list_check
+      changed_when: false
+      tags:
+        - distrobox
+        - devops
+        - sre
+
+    - name: "Assemble SRE Distrobox container (if missing)"
+      ansible.builtin.command:
+        cmd: distrobox assemble create --file {{ dotfiles_dir }}/distrobox/distrobox.ini
+      when: "'sre-toolbox' not in distrobox_list_check.stdout"
+      register: distrobox_assemble_result
+      tags:
+        - distrobox
+        - devops
+        - sre
+
       tags:
         - devpod
 
@@ -571,6 +683,61 @@
         cmd: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm/bin/install_plugins"
       failed_when: false
       changed_when: false
+    # 8.5 Antigravity CLI Local Availability
+    - name: "Ensure ~/.local/bin directory exists"
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        state: directory
+        mode: '0755'
+
+    - name: "Check if antigravity-cli is installed via Homebrew"
+      ansible.builtin.stat:
+        path: "/home/linuxbrew/.linuxbrew/bin/antigravity"
+      register: brew_antigravity_stat
+
+    - name: "Ensure antigravity and agy are linked in ~/.local/bin"
+      ansible.builtin.file:
+        src: "/home/linuxbrew/.linuxbrew/bin/antigravity"
+        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - antigravity
+        - agy
+      when: brew_antigravity_stat.stat.exists
+
+    # --------------------------------------------------------------------------
+    # 9. Distrobox SRE / DevOps / Platform Engineering Sandbox
+    # --------------------------------------------------------------------------
+    - name: "Ensure SRE Distrobox provisioning script is executable"
+      ansible.builtin.file:
+        path: "{{ dotfiles_dir }}/distrobox/provision-sre.sh"
+        mode: '0755'
+      tags:
+        - distrobox
+        - devops
+        - sre
+
+    - name: "Check if SRE Distrobox container already exists"
+      ansible.builtin.command:
+        cmd: distrobox list
+      register: distrobox_list_check
+      changed_when: false
+      tags:
+        - distrobox
+        - devops
+        - sre
+
+    - name: "Assemble SRE Distrobox container (if missing)"
+      ansible.builtin.command:
+        cmd: distrobox assemble create --file {{ dotfiles_dir }}/distrobox/distrobox.ini
+      when: "'sre-toolbox' not in distrobox_list_check.stdout"
+      register: distrobox_assemble_result
+      tags:
+        - distrobox
+        - devops
+        - sre
+
 
 
 
