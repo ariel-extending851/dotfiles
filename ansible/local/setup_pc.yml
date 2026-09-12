@@ -542,6 +542,7 @@
         - "tmux"
         - "bash"
         - "starship"
+        - "nvim"
         - "ssh"
 
     - name: "Enforce strict permissions on sensitive directories and files"
