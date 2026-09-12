@@ -25,11 +25,38 @@ alias dbx='distrobox'
 # --- Backup ---
 alias backup-now='sudo btrbk -c /etc/btrbk/btrbk.conf run && $HOME/backup-data-ext4.sh'
 
-# --- SSH Key unlock ---
-alias unlock-ssh='export BW_SESSION=$(bw unlock --raw) && eval $(ssh-agent -s) && bw get item Omarchy-PC | jq -r ".sshKey.privateKey" | ssh-add -'
+# --- SSH Key unlock from Bitwarden ---
+unlock-ssh() {
+  local session
+  session=$(bw unlock --raw 2>&1) || {
+    echo "Erro ao desbloquear o cofre Bitwarden:"
+    echo "$session"
+    return 1
+  }
+  export BW_SESSION="$session"
+  if [ -z "$SSH_AUTH_SOCK" ] || ! ssh-add -l &>/dev/null; then
+    eval "$(ssh-agent -s)" >/dev/null
+  fi
+  bw get item Omarchy-PC | jq -r '.sshKey.privateKey' | ssh-add -
+  echo "✓ Chave SSH do Bitwarden carregada com sucesso no ssh-agent."
+}
 
 # --- SOPS Age Key Restore from Bitwarden ---
-alias restore-sops='export BW_SESSION=$(bw unlock --raw) && mkdir -p ~/.config/sops/age && bw get item "SOPS-Age-Key" | jq -r ".notes" > ~/.config/sops/age/keys.txt && chmod 600 ~/.config/sops/age/keys.txt && echo "✓ Chave SOPS Age restaurada em ~/.config/sops/age/keys.txt."'
+restore-sops() {
+  local session
+  if [ -z "$BW_SESSION" ]; then
+    session=$(bw unlock --raw 2>&1) || {
+      echo "Erro ao desbloquear o cofre Bitwarden:"
+      echo "$session"
+      return 1
+    }
+    export BW_SESSION="$session"
+  fi
+  mkdir -p ~/.config/sops/age
+  bw get item "SOPS-Age-Key" | jq -r ".notes" > ~/.config/sops/age/keys.txt
+  chmod 600 ~/.config/sops/age/keys.txt
+  echo "✓ Chave SOPS Age restaurada em ~/.config/sops/age/keys.txt."
+}
 
 
 # --- FZF Integration ---
