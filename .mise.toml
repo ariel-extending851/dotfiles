@@ -72,4 +72,12 @@ run = "distrobox enter sre-toolbox --no-tty -- sudo bash /var/home/agfonseca/Pro
 description = "Run full zero-to-hero workstation bootstrap (Fedora Atomic)"
 run = "./bootstrap.sh"
 
+[tasks."apply:visual"]
+description = "Apply Omakase visual layer, fonts, and COSMIC dotfiles"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags visual,fonts,cosmic"
+
+[tasks.theme]
+description = "Switch desktop theme (tokyonight, catppuccin, gruvbox, kanagawa)"
+run = "theme-switch"
+
 

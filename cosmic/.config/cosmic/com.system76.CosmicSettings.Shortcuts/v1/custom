@@ -1,0 +1,8 @@
+{
+    (modifiers: [Super], key: "Return"): System(Terminal),
+    (modifiers: [Super], key: "t"): System(Terminal),
+    (modifiers: [Super], key: "d"): System(Launcher),
+    (modifiers: [Super], key: "q"): Close,
+    (modifiers: [Super], key: "y"): ToggleTiling,
+    (modifiers: [Super], key: "g"): ToggleWindowFloating,
+}

@@ -431,3 +431,44 @@
         - gitleaks_check is defined
         - gitleaks_check.rc is defined
 
+    # --------------------------------------------------------------------------
+    # 13. Omakase Visual Layer & COSMIC Integration Verification
+    # --------------------------------------------------------------------------
+    - name: "Check if JetBrainsMono Nerd Font is installed"
+      ansible.builtin.stat:
+        path: "{{ user_home }}/.local/share/fonts/JetBrainsMonoNerdFont-Regular.ttf"
+      register: jb_font_verify
+
+    - name: "Assert JetBrainsMono Nerd Font is present"
+      ansible.builtin.assert:
+        that:
+          - jb_font_verify.stat.exists
+        fail_msg: "FALHA: JetBrainsMono Nerd Font não está instalada em ~/.local/share/fonts!"
+        success_msg: "OK: JetBrainsMono Nerd Font instalada e disponível."
+
+    - name: "Check COSMIC dotfiles managed by Stow"
+      ansible.builtin.stat:
+        path: "{{ user_home }}/.config/cosmic/com.system76.CosmicTerm/v1/font_name"
+      register: cosmic_term_font_verify
+
+    - name: "Assert COSMIC terminal config is a managed Stow symlink"
+      ansible.builtin.assert:
+        that:
+          - cosmic_term_font_verify.stat.exists
+          - cosmic_term_font_verify.stat.islnk
+        fail_msg: "FALHA: Configurações do cosmic-term não estão stowed no ~/.config/cosmic!"
+        success_msg: "OK: cosmic-term gerenciado declarativamente pelo Stow."
+
+    - name: "Check theme-switch CLI script"
+      ansible.builtin.stat:
+        path: "{{ user_home }}/.local/bin/theme-switch"
+      register: theme_switch_stat
+
+    - name: "Assert theme-switch CLI exists and is executable"
+      ansible.builtin.assert:
+        that:
+          - theme_switch_stat.stat.exists
+          - theme_switch_stat.stat.executable
+        fail_msg: "FALHA: theme-switch não encontrado ou não executável em ~/.local/bin!"
+        success_msg: "OK: theme-switch CLI operacional no PATH."
+

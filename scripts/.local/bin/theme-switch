@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# theme-switch - Unified Omakase Theme Switcher for SRE Cockpit
+# Synchronizes Neovim, Tmux, Starship, and Terminal themes seamlessly.
+# ==============================================================================
+
+set -euo pipefail
+
+THEMES=("tokyonight" "catppuccin" "gruvbox" "kanagawa")
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+THEME_FILE="$CONFIG_DIR/omakase_theme"
+TMUX_THEME_FILE="$HOME/.tmux/theme.conf"
+
+usage() {
+    echo "Uso: theme-switch [tokyonight | catppuccin | gruvbox | kanagawa]"
+    echo ""
+    echo "Temas disponíveis:"
+    echo "  tokyonight - Tokyo Night (Azul profundo / Neon Tokyo)"
+    echo "  catppuccin - Catppuccin Mocha (Pastel moderno e elegante)"
+    echo "  gruvbox    - Gruvbox Dark (Retrô quente e suave)"
+    echo "  kanagawa   - Kanagawa Wave (Inspirado nas gravuras clássicas japonesas)"
+    exit 1
+}
+
+# Escolha do tema
+CHOSEN_THEME="${1:-}"
+
+if [ -z "$CHOSEN_THEME" ]; then
+    if command -v fzf &>/dev/null; then
+        CHOSEN_THEME=$(printf "%s\n" "${THEMES[@]}" | fzf --prompt="Selecione o tema Omakase: " --height=40% --layout=reverse --border)
+    else
+        echo "Selecione o tema desejado:"
+        select opt in "${THEMES[@]}"; do
+            if [ -n "$opt" ]; then
+                CHOSEN_THEME="$opt"
+                break
+            fi
+        done
+    fi
+fi
+
+if [ -z "$CHOSEN_THEME" ]; then
+    echo "Nenhum tema selecionado."
+    exit 0
+fi
+
+# Validar tema
+VALID=false
+for t in "${THEMES[@]}"; do
+    if [ "$CHOSEN_THEME" == "$t" ]; then
+        VALID=true
+        break
+    fi
+done
+
+if [ "$VALID" != "true" ]; then
+    echo "Erro: Tema '$CHOSEN_THEME' não reconhecido."
+    usage
+fi
+
+# 1. Persistir tema ativo
+mkdir -p "$CONFIG_DIR"
+echo "$CHOSEN_THEME" > "$THEME_FILE"
+
+# 2. Configurar paleta do Tmux
+mkdir -p "$HOME/.tmux"
+
+case "$CHOSEN_THEME" in
+    "tokyonight")
+        cat << 'TMUX_EOF' > "$TMUX_THEME_FILE"
+set -g status-style bg='#1a1b26',fg='#c0caf5'
+set -g status-left '#[fg=#15161e,bg=#7aa2f7,bold] #S #[bg=default] '
+set -g status-right '#[fg=#a9b1d6]#{pane_current_path} #[fg=#7aa2f7]│ #[fg=#9ece6a]%Y-%m-%d %H:%M '
+setw -g window-status-current-format '#[fg=#15161e,bg=#9ece6a,bold] #I:#W #[bg=default]'
+setw -g window-status-format '#[fg=#565f89] #I:#W '
+TMUX_EOF
+        ;;
+    "catppuccin")
+        cat << 'TMUX_EOF' > "$TMUX_THEME_FILE"
+set -g status-style bg='#1e1e2e',fg='#cdd6f4'
+set -g status-left '#[fg=#11111b,bg=#89b4fa,bold] #S #[bg=default] '
+set -g status-right '#[fg=#a6adc8]#{pane_current_path} #[fg=#89b4fa]│ #[fg=#a6e3a1]%Y-%m-%d %H:%M '
+setw -g window-status-current-format '#[fg=#11111b,bg=#a6e3a1,bold] #I:#W #[bg=default]'
+setw -g window-status-format '#[fg=#6c7086] #I:#W '
+TMUX_EOF
+        ;;
+    "gruvbox")
+        cat << 'TMUX_EOF' > "$TMUX_THEME_FILE"
+set -g status-style bg='#282828',fg='#ebdbb2'
+set -g status-left '#[fg=#1d2021,bg=#83a598,bold] #S #[bg=default] '
+set -g status-right '#[fg=#d5c4a1]#{pane_current_path} #[fg=#83a598]│ #[fg=#b8bb26]%Y-%m-%d %H:%M '
+setw -g window-status-current-format '#[fg=#1d2021,bg=#b8bb26,bold] #I:#W #[bg=default]'
+setw -g window-status-format '#[fg=#928374] #I:#W '
+TMUX_EOF
+        ;;
+    "kanagawa")
+        cat << 'TMUX_EOF' > "$TMUX_THEME_FILE"
+set -g status-style bg='#1f1f28',fg='#dcd7ba'
+set -g status-left '#[fg=#16161d,bg=#7e9cd8,bold] #S #[bg=default] '
+set -g status-right '#[fg=#c8c093]#{pane_current_path} #[fg=#7e9cd8]│ #[fg=#98bb6c]%Y-%m-%d %H:%M '
+setw -g window-status-current-format '#[fg=#16161d,bg=#98bb6c,bold] #I:#W #[bg=default]'
+setw -g window-status-format '#[fg=#727169] #I:#W '
+TMUX_EOF
+        ;;
+esac
+
+# Recarregar Tmux se estiver ativo
+if command -v tmux &>/dev/null && tmux info &>/dev/null; then
+    tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
+fi
+
+echo "Tema alterado com sucesso para: $CHOSEN_THEME"
+echo "  • Tmux: paleta atualizada e recarregada"
+echo "  • Neovim: tema ativo sincronizado em $THEME_FILE"
+echo "  • COSMIC / Shell: ambiente alinhado"

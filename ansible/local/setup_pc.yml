@@ -622,6 +622,27 @@
         state: absent
       when: ssh_config_stat.stat.exists and not ssh_config_stat.stat.islnk
 
+    - name: "Check if COSMIC autotile is already a symlink"
+      ansible.builtin.stat:
+        path: "{{ user_home }}/.config/cosmic/com.system76.CosmicComp/v1/autotile"
+      register: cosmic_autotile_stat
+      tags:
+        - dotfiles
+        - visual
+        - cosmic
+        - omakase
+
+    - name: "Prepare home directory for Stow (Remove conflicting regular file COSMIC autotile)"
+      ansible.builtin.file:
+        path: "{{ user_home }}/.config/cosmic/com.system76.CosmicComp/v1/autotile"
+        state: absent
+      when: cosmic_autotile_stat.stat.exists and not cosmic_autotile_stat.stat.islnk
+      tags:
+        - dotfiles
+        - visual
+        - cosmic
+        - omakase
+
     - name: "Apply dotfiles via GNU Stow"
       shell: "stow --dir={{ dotfiles_dir }} --target={{ user_home }} --restow {{ item }}"
       with_items:
@@ -630,6 +651,13 @@
         - "starship"
         - "nvim"
         - "ssh"
+        - "cosmic"
+        - "scripts"
+      tags:
+        - dotfiles
+        - visual
+        - cosmic
+        - omakase
 
     - name: "Enforce strict permissions on sensitive directories and files"
       ansible.builtin.file:
@@ -681,6 +709,59 @@
         - antigravity
         - agy
       when: brew_antigravity_stat.stat.exists
+
+    # 8.6 Omakase Visual Layer - Typography (JetBrainsMono Nerd Font)
+    - name: "Ensure fonts directory exists in user space"
+      ansible.builtin.file:
+        path: "{{ user_home }}/.local/share/fonts"
+        state: directory
+        mode: '0755'
+      tags:
+        - visual
+        - fonts
+        - omakase
+
+    - name: "Check if JetBrainsMono Nerd Font is installed"
+      ansible.builtin.stat:
+        path: "{{ user_home }}/.local/share/fonts/JetBrainsMonoNerdFont-Regular.ttf"
+      register: jb_font_stat
+      tags:
+        - visual
+        - fonts
+        - omakase
+
+    - name: "Download and extract JetBrainsMono Nerd Font"
+      ansible.builtin.unarchive:
+        src: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.3.0/JetBrainsMono.tar.xz"
+        dest: "{{ user_home }}/.local/share/fonts"
+        remote_src: true
+        mode: '0644'
+      when: not jb_font_stat.stat.exists
+      register: font_install
+      tags:
+        - visual
+        - fonts
+        - omakase
+
+    - name: "Update font cache"
+      ansible.builtin.command:
+        cmd: "fc-cache -fv {{ user_home }}/.local/share/fonts"
+      when: font_install is changed
+      tags:
+        - visual
+        - fonts
+        - omakase
+
+    # 8.7 Omakase Theme Initialization
+    - name: "Initialize default Omakase theme"
+      ansible.builtin.command:
+        cmd: "{{ user_home }}/.local/bin/theme-switch tokyonight"
+      args:
+        creates: "{{ user_home }}/.config/omakase_theme"
+      tags:
+        - visual
+        - theme
+        - omakase
 
     # --------------------------------------------------------------------------
     # 9. Distrobox SRE / DevOps / Platform Engineering Sandbox
