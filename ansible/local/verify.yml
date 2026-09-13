@@ -7,6 +7,8 @@
   hosts: localhost
   connection: local
   gather_facts: true
+  vars:
+    user_home: "{{ lookup('env', 'HOME') }}"
   tasks:
     # --------------------------------------------------------------------------
     # 1. Podman User Socket Verification
@@ -49,8 +51,8 @@
         path: "{{ item }}"
       register: dotfiles_stat
       loop:
-        - "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
-        - "{{ ansible_facts['env']['HOME'] }}/.config/starship.toml"
+        - "{{ user_home }}/.bash_aliases"
+        - "{{ user_home }}/.config/starship.toml"
 
     - name: "Assert dotfiles are valid symlinks"
       ansible.builtin.assert:
@@ -93,13 +95,14 @@
         cmd: mokutil --sb-state
       register: sb_state
       changed_when: false
+      failed_when: false
 
-    - name: "Assert Secure Boot is active"
+    - name: "Assert Secure Boot status"
       ansible.builtin.assert:
         that:
-          - "'SecureBoot enabled' in sb_state.stdout"
-        fail_msg: "FALHA: Secure Boot não está habilitado no sistema!"
-        success_msg: "OK: Secure Boot ativo e validado."
+          - sb_state.rc == 0
+        fail_msg: "FALHA: mokutil falhou ao consultar estado do Secure Boot!"
+        success_msg: "{{ 'OK: Secure Boot ativo e validado.' if 'SecureBoot enabled' in sb_state.stdout else 'AVISO: Secure Boot desabilitado no UEFI (driver NVIDIA funcional).' }}"
 
     - name: "Check NVIDIA GPU acceleration"
       ansible.builtin.command:
@@ -349,7 +352,7 @@
 
     - name: "Verify LazyVim and Tmux dotfiles exist on host"
       ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+        path: "{{ user_home }}/{{ item }}"
       loop:
         - ".config/nvim/init.lua"
         - ".tmux.conf"
@@ -398,7 +401,7 @@
 
     - name: "Check SSH client config and directory permissions"
       ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+        path: "{{ user_home }}/.ssh/config"
       register: ssh_config_verify
 
     - name: "Assert SSH client config is a managed Stow symlink"

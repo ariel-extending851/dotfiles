@@ -328,6 +328,11 @@
     - name: "Include system_tuning role"
       ansible.builtin.include_role:
         name: system_tuning
+        apply:
+          tags:
+            - performance
+            - security
+            - sysctl
       tags:
         - performance
         - security
@@ -393,7 +398,8 @@
     - sre
   vars:
     # Modern syntax to avoid Warnings
-    workspace_dir: "{{ ansible_facts['env']['HOME'] }}/Projects"
+    user_home: "{{ lookup('env', 'HOME') }}"
+    workspace_dir: "{{ user_home }}/Projects"
     dotfiles_dir: "{{ workspace_dir }}/dotfiles"
 
     # Git Identity
@@ -412,7 +418,7 @@
         state: started
         enabled: true
       environment:
-        XDG_RUNTIME_DIR: "{{ ansible_facts['env']['XDG_RUNTIME_DIR'] | default('/run/user/' ~ ansible_facts['user_uid']) }}"
+        XDG_RUNTIME_DIR: "{{ lookup('env', 'XDG_RUNTIME_DIR') | default('/run/user/' ~ lookup('pipe', 'id -u'), true) }}"
       tags:
         - podman
         - devpod
@@ -431,7 +437,7 @@
 
     - name: "Ensure DevContainer mount directories exist"
       ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/{{ item }}"
+        path: "{{ user_home }}/{{ item }}"
         state: directory
         mode: '0700'
       loop:
@@ -519,7 +525,7 @@
     - name: "Install TPM (Tmux Plugin Manager)"
       git:
         repo: "https://github.com/tmux-plugins/tpm"
-        dest: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm"
+        dest: "{{ user_home }}/.tmux/plugins/tpm"
 
     # 5. GitOps - Cloning
     - name: "Clone repositories to Workspace/repos"
@@ -551,11 +557,12 @@
     # 7. SSH Signing Automation (Detects key in RAM)
     - name: "Configure Git signing key (If available in RAM)"
       shell: |
-        SSH_KEY=$(ssh-add -L 2>/dev/null | head -n1 | awk '{print $1, $2}')
+        SSH_KEY=$(ssh-add -L 2>/dev/null | grep -E '^ssh-(ed25519|rsa|ecdsa)' | head -n1 | awk '{print $1, $2}')
         if [ -n "$SSH_KEY" ]; then
           git config --global user.signingkey "$SSH_KEY"
           echo "changed"
         else
+          git config --global --unset user.signingkey 2>/dev/null || true
           echo "skipped"
         fi
       register: git_signing
@@ -565,13 +572,13 @@
     # 7.4 Ensure .bashrc loads Homebrew defensively (ignored inside Distrobox/containers)
     - name: "Remove legacy unconditional Homebrew load from .bashrc"
       ansible.builtin.lineinfile:
-        path: "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+        path: "{{ user_home }}/.bashrc"
         line: 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
         state: absent
 
     - name: "Configure .bashrc to load Homebrew defensively"
       ansible.builtin.lineinfile:
-        path: "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+        path: "{{ user_home }}/.bashrc"
         line: '[ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
         state: present
         create: yes
@@ -579,7 +586,7 @@
     # 7.5 Ensure .bashrc loads .bash_aliases
     - name: "Configure .bashrc to load aliases"
       lineinfile:
-        path: "{{ ansible_facts['env']['HOME'] }}/.bashrc"
+        path: "{{ user_home }}/.bashrc"
         line: "[ -f ~/.bash_aliases ] && . ~/.bash_aliases"
         state: present
         create: yes
@@ -587,28 +594,28 @@
     # 8. Dotfiles
     - name: "Check if .bash_aliases is already a symlink"
       ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
+        path: "{{ user_home }}/.bash_aliases"
       register: bash_aliases_stat
 
     - name: "Prepare home directory for Stow (Remove conflicting regular file .bash_aliases)"
       ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/.bash_aliases"
+        path: "{{ user_home }}/.bash_aliases"
         state: absent
       when: bash_aliases_stat.stat.exists and not bash_aliases_stat.stat.islnk
 
     - name: "Check if .ssh/config is already a symlink"
       ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+        path: "{{ user_home }}/.ssh/config"
       register: ssh_config_stat
 
     - name: "Prepare home directory for Stow (Remove conflicting regular file .ssh/config)"
       ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+        path: "{{ user_home }}/.ssh/config"
         state: absent
       when: ssh_config_stat.stat.exists and not ssh_config_stat.stat.islnk
 
     - name: "Apply dotfiles via GNU Stow"
-      shell: "stow --dir={{ dotfiles_dir }} --target={{ ansible_facts['env']['HOME'] }} --restow {{ item }}"
+      shell: "stow --dir={{ dotfiles_dir }} --target={{ user_home }} --restow {{ item }}"
       with_items:
         - "tmux"
         - "bash"
@@ -618,7 +625,7 @@
 
     - name: "Enforce strict permissions on sensitive directories and files"
       ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/{{ item.path }}"
+        path: "{{ user_home }}/{{ item.path }}"
         mode: "{{ item.mode }}"
       loop:
         - { path: ".ssh", mode: "0700" }
@@ -633,21 +640,21 @@
     - name: "Ensure Tmux Plugin Manager (TPM) is installed"
       ansible.builtin.git:
         repo: "https://github.com/tmux-plugins/tpm"
-        dest: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm"
+        dest: "{{ user_home }}/.tmux/plugins/tpm"
         version: master
         depth: 1
       failed_when: false
 
     - name: "Install Tmux plugins via TPM"
       ansible.builtin.command:
-        cmd: "{{ ansible_facts['env']['HOME'] }}/.tmux/plugins/tpm/bin/install_plugins"
+        cmd: "{{ user_home }}/.tmux/plugins/tpm/bin/install_plugins"
       failed_when: false
       changed_when: false
 
     # 8.5 Antigravity CLI Local Availability
     - name: "Ensure ~/.local/bin directory exists"
       ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/.local/bin"
+        path: "{{ user_home }}/.local/bin"
         state: directory
         mode: '0755'
 
@@ -659,7 +666,7 @@
     - name: "Ensure antigravity and agy are linked in ~/.local/bin"
       ansible.builtin.file:
         src: "/home/linuxbrew/.linuxbrew/bin/antigravity"
-        dest: "{{ ansible_facts['env']['HOME'] }}/.local/bin/{{ item }}"
+        dest: "{{ user_home }}/.local/bin/{{ item }}"
         state: link
         force: true
       loop:
@@ -965,8 +972,8 @@
     - sdr
 
   vars:
-    user_home: "{{ ansible_facts['env']['HOME'] }}"
-    xdg_runtime_dir: "{{ ansible_facts['env']['XDG_RUNTIME_DIR'] | default('/run/user/' ~ ansible_facts['user_uid']) }}"
+    user_home: "{{ lookup('env', 'HOME') }}"
+    xdg_runtime_dir: "{{ lookup('env', 'XDG_RUNTIME_DIR') | default('/run/user/' ~ lookup('pipe', 'id -u'), true) }}"
 
     # Ollama configuration
     ollama_image: "docker.io/ollama/ollama:latest"
