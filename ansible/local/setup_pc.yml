@@ -379,6 +379,14 @@
         - security
         - firewall
 
+    # 9. Time Synchronization & RTC Validation
+    - name: "Ensure hardware clock (RTC) is set to UTC"
+      community.general.timezone:
+        hwclock: UTC
+      tags:
+        - system
+        - time
+
 # ==============================================================================
 # Play 2: User Configuration (Stateless DevOps Profile)
 # Runs with standard user privileges (become: false).
