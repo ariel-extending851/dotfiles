@@ -8,8 +8,6 @@
   connection: local
   gather_facts: true
   become: true
-  tags:
-    - system
 
   vars:
     # Kernel arguments required for NVIDIA proprietary driver
@@ -32,12 +30,16 @@
       ansible.builtin.stat:
         path: /run/ostree-booted
       register: ostree_booted
+      tags:
+        - always
 
     - name: "Check for NVIDIA GPU hardware"
       ansible.builtin.shell: "lspci -nn | grep -iE 'vga|3d controller' | grep -i nvidia"
       register: nvidia_gpu_check
       failed_when: false
       changed_when: false
+      tags:
+        - always
 
     - name: "Manage NVIDIA & Secure Boot on Fedora Atomic"
       when:
@@ -61,6 +63,7 @@
               rpm-ostree install --idempotent --unchanged-exit-77
               https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
               https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
+          when: rpmfusion_check.rc != 0
           register: rpmfusion_install
           failed_when: rpmfusion_install.rc != 0 and rpmfusion_install.rc != 77
           changed_when: rpmfusion_install.rc == 0
@@ -296,6 +299,7 @@
           community.general.rpm_ostree_pkg:
             name: "{{ nvidia_packages }}"
             state: present
+          when: akmod_nvidia_installed.rc != 0
           register: nvidia_pkg_result
 
         # 6. User Guidance Notifications
