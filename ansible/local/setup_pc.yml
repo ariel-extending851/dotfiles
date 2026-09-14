@@ -379,13 +379,102 @@
         - security
         - firewall
 
-    # 9. Time Synchronization & RTC Validation
-    - name: "Ensure hardware clock (RTC) is set to UTC"
+    # 9. Time Synchronization & RTC Hardening (NTP.br & Hardware UTC)
+    - name: "Ensure timezone is America/Sao_Paulo and hardware clock (RTC) is UTC"
       community.general.timezone:
+        name: America/Sao_Paulo
         hwclock: UTC
       tags:
         - system
         - time
+        - security
+
+    - name: "Deploy resilient Chrony configuration (NTP.br, Anycast & Direct IP fallbacks)"
+      ansible.builtin.copy:
+        dest: /etc/chrony.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # ==============================================================================
+          # /etc/chrony.conf - Managed by Ansible (SRE High-Resilience Time Policy)
+          # ==============================================================================
+
+          # NTP.br - Observatório Nacional & NIC.br (Stratum 1)
+          pool pool.ntp.br iburst
+          server a.st1.ntp.br iburst
+          server b.st1.ntp.br iburst
+          server c.st1.ntp.br iburst
+          server gps.ntp.br iburst
+
+          # Global Anycast Stratum 1 Fallback (DNSSEC authenticated)
+          server time.cloudflare.com iburst
+          server time.google.com iburst
+
+          # Direct Numeric IP Fallbacks (Breaks any DNS / DNSSEC chicken-and-egg boot deadlock)
+          server 200.160.7.186 iburst   # a.st1.ntp.br
+          server 200.189.40.8 iburst    # b.st1.ntp.br
+          server 162.159.200.1 iburst   # time.cloudflare.com
+          server 216.239.35.0 iburst    # time.google.com
+
+          # DHCP NTP sources if provided
+          sourcedir /run/chrony-dhcp
+
+          # Drift and stepping
+          driftfile /var/lib/chrony/drift
+          makestep 1.0 3
+
+          # Kernel real-time clock synchronization (RTC)
+          rtcsync
+
+          ntsdumpdir /var/lib/chrony
+          leapseclist /usr/share/zoneinfo/leap-seconds.list
+          logdir /var/log/chrony
+      register: chrony_config_deploy
+      tags:
+        - system
+        - time
+        - security
+
+    - name: "Ensure chronyd service is enabled and started"
+      ansible.builtin.systemd:
+        name: chronyd
+        state: started
+        enabled: true
+      tags:
+        - system
+        - time
+        - security
+
+    - name: "Restart chronyd if configuration changed"
+      ansible.builtin.systemd:
+        name: chronyd
+        state: restarted
+      when: chrony_config_deploy is changed
+      tags:
+        - system
+        - time
+        - security
+
+    - name: "Force immediate NTP time step"
+      ansible.builtin.command:
+        cmd: chronyc -a makestep
+      changed_when: false
+      failed_when: false
+      tags:
+        - system
+        - time
+        - security
+
+    - name: "Synchronize system time to hardware clock (RTC in UTC)"
+      ansible.builtin.command:
+        cmd: hwclock --systohc --utc
+      changed_when: false
+      failed_when: false
+      tags:
+        - system
+        - time
+        - security
 
 # ==============================================================================
 # Play 2: User Configuration (Stateless DevOps Profile)
@@ -622,21 +711,25 @@
         state: absent
       when: ssh_config_stat.stat.exists and not ssh_config_stat.stat.islnk
 
-    - name: "Check if COSMIC autotile is already a symlink"
+    - name: "Check if COSMIC files are already symlinks"
       ansible.builtin.stat:
-        path: "{{ user_home }}/.config/cosmic/com.system76.CosmicComp/v1/autotile"
-      register: cosmic_autotile_stat
+        path: "{{ user_home }}/{{ item }}"
+      register: cosmic_files_stat
+      loop:
+        - ".config/cosmic/com.system76.CosmicComp/v1/autotile"
+        - ".config/cosmic/com.system76.CosmicTerm/v1/font_name"
       tags:
         - dotfiles
         - visual
         - cosmic
         - omakase
 
-    - name: "Prepare home directory for Stow (Remove conflicting regular file COSMIC autotile)"
+    - name: "Prepare home directory for Stow (Remove conflicting regular COSMIC files)"
       ansible.builtin.file:
-        path: "{{ user_home }}/.config/cosmic/com.system76.CosmicComp/v1/autotile"
+        path: "{{ item.stat.path }}"
         state: absent
-      when: cosmic_autotile_stat.stat.exists and not cosmic_autotile_stat.stat.islnk
+      when: item.stat.exists and not item.stat.islnk
+      loop: "{{ cosmic_files_stat.results }}"
       tags:
         - dotfiles
         - visual

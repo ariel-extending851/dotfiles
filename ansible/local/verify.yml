@@ -472,3 +472,37 @@
         fail_msg: "FALHA: theme-switch não encontrado ou não executável em ~/.local/bin!"
         success_msg: "OK: theme-switch CLI operacional no PATH."
 
+    # --------------------------------------------------------------------------
+    # 14. Time Synchronization & Hardware Clock (RTC) Verification
+    # --------------------------------------------------------------------------
+    - name: "Check system time and hardware clock status via timedatectl"
+      ansible.builtin.command:
+        cmd: timedatectl status
+      register: timedatectl_check
+      changed_when: false
+
+    - name: "Assert RTC is in UTC and timezone is America/Sao_Paulo"
+      ansible.builtin.assert:
+        that:
+          - "'RTC in local TZ: no' in timedatectl_check.stdout"
+          - "'America/Sao_Paulo' in timedatectl_check.stdout"
+        fail_msg: "FALHA: RTC não está em UTC ou fuso horário não é America/Sao_Paulo!"
+        success_msg: "OK: Timezone America/Sao_Paulo e RTC configurado em UTC."
+
+    - name: "Check chrony tracking status"
+      ansible.builtin.command:
+        cmd: chronyc tracking
+      register: chrony_tracking_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert chronyd is synchronized with Stratum >= 1"
+      ansible.builtin.assert:
+        that:
+          - chrony_tracking_check.rc == 0
+          - "'Leap status     : Normal' in chrony_tracking_check.stdout"
+        fail_msg: "AVISO: chronyd ainda não sincronizou com os servidores NTP!"
+        success_msg: "OK: chronyd sincronizado com servidores NTP (Leap status: Normal)."
+      when: chrony_tracking_check.rc == 0
+
+

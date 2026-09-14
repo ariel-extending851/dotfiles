@@ -2,6 +2,7 @@
 - name: "Reload sysctl"
   ansible.builtin.command:
     cmd: sysctl --system
+  changed_when: false
   listen: "reload sysctl"
   when: ansible_virtualization_type | default('') not in ['docker', 'container', 'podman', 'containerd']
 
@@ -11,4 +12,3 @@
     state: restarted
   listen: "restart systemd-resolved"
   when: ansible_virtualization_type | default('') not in ['docker', 'container', 'podman', 'containerd']
-
