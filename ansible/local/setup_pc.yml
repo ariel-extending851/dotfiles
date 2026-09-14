@@ -1254,7 +1254,7 @@
           [Container]
           Image={{ ollama_image }}
           ContainerName={{ ollama_container_name }}
-          PublishPort={{ ollama_port }}:11434
+          PublishPort=127.0.0.1:{{ ollama_port }}:11434
           Volume={{ ollama_models_dir }}:/root/.ollama:Z
           AutoUpdate=registry
 
@@ -1343,7 +1343,7 @@
           Image={{ tileserver_image }}
           ContainerName={{ tileserver_container_name }}
           User=root
-          PublishPort={{ tileserver_port }}:8080
+          PublishPort=127.0.0.1:{{ tileserver_port }}:8080
           Volume={{ tileserver_data_dir }}:/data:Z
           AutoUpdate=registry
 

@@ -3,12 +3,12 @@
 # ==============================================================================
 
 [tasks.lint]
-description = "Run static analysis with ansible-lint"
-run = "ansible-lint"
+description = "Run static analysis with ansible-lint inside SRE toolbox"
+run = "distrobox enter sre-toolbox --no-tty -- ansible-lint"
 
 [tasks."test:syntax"]
 description = "Validate syntax of all playbooks"
-run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check && ansible-playbook -i ansible/local/hosts.ini ansible/local/verify.yml --syntax-check"
 
 [tasks."test:molecule"]
 description = "Run Molecule integration and idempotency test on system_tuning role"

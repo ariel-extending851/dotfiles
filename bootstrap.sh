@@ -136,7 +136,7 @@ cd "$DOTFILES_DIR"
 
 ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml -K
 
-# 7. Validação de Aceitação Final (45 Asserções)
+# 7. Validação de Aceitação Final (57+ Asserções)
 log_step "[6/6] Executando suíte automatizada de aceitação (verify.yml)..."
 ansible-playbook -i ansible/local/hosts.ini ansible/local/verify.yml
 
@@ -145,7 +145,7 @@ echo "==========================================================================
 echo "🎉 [SUCESSO] Bootstrap da Workstation Concluído!"
 echo "=========================================================================="
 echo "Resumo do ambiente preparado:"
-echo "  • Host Fedora Atomic: Minimalista, Hardened (sysctl, DNSSEC/DoT, Stealth Firewall)"
+echo "  • Host Fedora Atomic: Minimalista, Hardened (sysctl, DoT, Chrony NTP.br, Stealth Firewall)"
 echo "  • Dotfiles aplicados via GNU Stow: bash, tmux (Ctrl+a), starship, nvim (LazyVim), ssh"
 echo "  • Distrobox 'sre-toolbox': Cockpit completo provisionado (40+ tools, IA, ai-jail, gitleaks)"
 echo "  • DevPod & Podman: Socket rootless ativo e configurado"
