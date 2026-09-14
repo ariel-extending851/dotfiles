@@ -1,16 +1,36 @@
+# Antigravity CLI
 .gemini/
+
+# Keys, Certificates & Secrets
 *.priv
 *.der
 *.key
 *.pem
 *.crt
+*.age
+keys.txt
+id_rsa*
+id_ed25519*
+id_ecdsa*
+known_hosts*
+
+# Environment & Credentials
+.env
+.env.*
+*.env
+
+# Logs & Temporary Files
+*.log
 *.retry
+*.swp
+*~
+
+# Python & Ansible Caches
 .ansible/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-*.swp
-*~
+
+# Tooling overrides
 .mise.local.toml
 .ai-jail
-
