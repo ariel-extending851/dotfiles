@@ -505,4 +505,23 @@
         success_msg: "OK: chronyd sincronizado com servidores NTP (Leap status: Normal)."
       when: chrony_tracking_check.rc == 0
 
+    # --------------------------------------------------------------------------
+    # 15. DNS Resolution & Security Verification
+    # --------------------------------------------------------------------------
+    - name: "Check DNS resolution via systemd-resolved"
+      ansible.builtin.command:
+        cmd: resolvectl query a.st1.ntp.br
+      register: dns_resolve_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert DNS resolution is operational via systemd-resolved"
+      ansible.builtin.assert:
+        that:
+          - dns_resolve_check.rc == 0
+          - "'200.160.7.186' in dns_resolve_check.stdout"
+        fail_msg: "FALHA: systemd-resolved não conseguiu resolver a.st1.ntp.br!"
+        success_msg: "OK: systemd-resolved operacional com resolução DNS íntegra."
+
+
 

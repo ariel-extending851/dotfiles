@@ -342,6 +342,13 @@
         - security
         - sysctl
 
+    - name: "Flush handlers to apply sysctl and systemd-resolved immediately"
+      ansible.builtin.meta: flush_handlers
+      tags:
+        - performance
+        - security
+        - sysctl
+
     # 8. Firewall Hardening (firewalld)
     - name: "Ensure firewalld is enabled and running"
       ansible.builtin.systemd:
