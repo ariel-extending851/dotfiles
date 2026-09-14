@@ -415,11 +415,11 @@
           server time.cloudflare.com iburst
           server time.google.com iburst
 
-          # Direct Numeric IP Fallbacks (Breaks any DNS / DNSSEC chicken-and-egg boot deadlock)
-          server 200.160.7.186 iburst   # a.st1.ntp.br
-          server 200.189.40.8 iburst    # b.st1.ntp.br
-          server 162.159.200.1 iburst   # time.cloudflare.com
-          server 216.239.35.0 iburst    # time.google.com
+          # Direct Numeric IP Fallbacks (a.st1.ntp.br, b.st1.ntp.br, cloudflare, google)
+          server 200.160.7.186 iburst
+          server 200.189.40.8 iburst
+          server 162.159.200.1 iburst
+          server 216.239.35.0 iburst
 
           # DHCP NTP sources if provided
           sourcedir /run/chrony-dhcp
