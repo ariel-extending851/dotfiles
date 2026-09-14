@@ -8,6 +8,15 @@
   connection: local
   gather_facts: true
   become: true
+  tags:
+    - system
+    - nvidia
+    - sysctl
+    - performance
+    - security
+    - firewall
+    - chrony
+    - time
 
   vars:
     # Kernel arguments required for NVIDIA proprietary driver
@@ -30,16 +39,32 @@
       ansible.builtin.stat:
         path: /run/ostree-booted
       register: ostree_booted
+      become: false
       tags:
-        - always
+        - system
+        - nvidia
+        - sysctl
+        - performance
+        - security
+        - firewall
+        - chrony
+        - time
 
     - name: "Check for NVIDIA GPU hardware"
       ansible.builtin.shell: "lspci -nn | grep -iE 'vga|3d controller' | grep -i nvidia"
       register: nvidia_gpu_check
       failed_when: false
       changed_when: false
+      become: false
       tags:
-        - always
+        - system
+        - nvidia
+        - sysctl
+        - performance
+        - security
+        - firewall
+        - chrony
+        - time
 
     - name: "Manage NVIDIA & Secure Boot on Fedora Atomic"
       when:
@@ -1280,6 +1305,17 @@
       tags:
         - ollama
 
+    - name: "Restart Ollama container service if quadlet changed"
+      ansible.builtin.systemd:
+        name: ollama.service
+        scope: user
+        state: restarted
+      environment:
+        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
+      when: ollama_quadlet is changed
+      tags:
+        - ollama
+
     - name: "Enable and start Ollama container service"
       ansible.builtin.systemd:
         name: ollama.service
@@ -1363,6 +1399,17 @@
       ansible.builtin.systemd:
         daemon_reload: true
         scope: user
+      environment:
+        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
+      when: tileserver_quadlet is changed
+      tags:
+        - maps
+
+    - name: "Restart TileServer GL container service if quadlet changed"
+      ansible.builtin.systemd:
+        name: tileserver-gl.service
+        scope: user
+        state: restarted
       environment:
         XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
       when: tileserver_quadlet is changed

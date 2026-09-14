@@ -1,4 +1,4 @@
-name: "CI / IaC Quality & Molecule Testing"
+name: "CI / DevSecOps & IaC Quality Gate"
 
 on:
   push:
@@ -7,6 +7,33 @@ on:
     branches: [ master, main ]
 
 jobs:
+  secrets-audit:
+    name: "Gitleaks Static Secrets Analysis"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Run Gitleaks Action"
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  shell-lint:
+    name: "Shell Scripts AST Syntax Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Validate bash scripts syntax"
+        run: |
+          set -e
+          find . -name "*.sh" -not -path "*/.git/*" -exec bash -n {} +
+          bash -n scripts/.local/bin/theme-switch
+
   lint:
     name: "Ansible Lint & Syntax Check"
     runs-on: ubuntu-latest
@@ -29,8 +56,8 @@ jobs:
 
       - name: "Syntax check playbooks"
         run: |
-          ansible-playbook ansible/local/setup_pc.yml --syntax-check
-          ansible-playbook ansible/local/verify.yml --syntax-check
+          ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --syntax-check
+          ansible-playbook -i ansible/local/hosts.ini ansible/local/verify.yml --syntax-check
 
   molecule:
     name: "Molecule Role Testing (Idempotence & State)"
