@@ -928,38 +928,21 @@
 # Play 3: EUD System Configuration (Network UPS Tools)
 # Runs with root privileges (become: true). Use -K (--ask-become-pass).
 # ==============================================================================
-- name: "EUD System - UPS Power Resilience (NUT)"
+- name: "EUD System - Radio & Satellite Tools (SatDump)"
   hosts: localhost
   connection: local
   gather_facts: true
   become: true
   tags:
     - eud
-    - nut
-    - ups
-
-  vars:
-    # NUT driver for USB HID UPS devices (APC, CyberPower, SMS, Eaton, etc.)
-    nut_driver: "usbhid-ups"
-    nut_ups_name: "eud-ups"
-    # Shutdown threshold: battery percentage to trigger graceful poweroff
-    nut_battery_shutdown_pct: 20
-    # NUT mode: standalone (single UPS, single machine)
-    nut_mode: "standalone"
+    - satdump
+    - sdr
 
   tasks:
     - name: "Check if system is running Fedora Atomic (OSTree)"
       ansible.builtin.stat:
         path: /run/ostree-booted
       register: ostree_booted
-
-    - name: "Install NUT (Network UPS Tools) via rpm-ostree"
-      ansible.builtin.command:
-        cmd: rpm-ostree install --idempotent --unchanged-exit-77 nut
-      register: nut_install
-      failed_when: nut_install.rc != 0 and nut_install.rc != 77
-      changed_when: nut_install.rc == 0
-      when: ostree_booted.stat.exists
 
     - name: "Check if SatDump COPR repo is configured"
       ansible.builtin.stat:
@@ -991,187 +974,6 @@
       changed_when: satdump_install.rc == 0
       when: ostree_booted.stat.exists
 
-    - name: "Ensure nut system group exists (Fedora standard GID 57)"
-      ansible.builtin.group:
-        name: nut
-        gid: 57
-        system: true
-        state: present
-
-    - name: "Ensure nut system user exists (Fedora standard UID 57)"
-      ansible.builtin.user:
-        name: nut
-        uid: 57
-        group: nut
-        system: true
-        shell: /bin/false
-        home: /run/nut
-        create_home: false
-        state: present
-
-    - name: "Ensure NUT configuration directory exists"
-      ansible.builtin.file:
-        path: /etc/ups
-        state: directory
-        owner: root
-        group: nut
-        mode: '0750'
-
-    - name: "Configure NUT mode (standalone)"
-      ansible.builtin.copy:
-        dest: /etc/ups/nut.conf
-        content: |
-          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
-          MODE={{ nut_mode }}
-        owner: root
-        group: nut
-        mode: '0640'
-
-    - name: "Configure UPS driver (ups.conf)"
-      ansible.builtin.copy:
-        dest: /etc/ups/ups.conf
-        content: |
-          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
-          # UPS connected via USB - auto-detected by usbhid-ups driver
-          [{{ nut_ups_name }}]
-              driver = {{ nut_driver }}
-              port = auto
-              desc = "No-break USB - Estação EUD"
-              # Polling interval in seconds
-              pollinterval = 15
-        owner: root
-        group: nut
-        mode: '0640'
-
-    - name: "Configure UPS monitor (upsmon.conf)"
-      ansible.builtin.copy:
-        dest: /etc/ups/upsmon.conf
-        content: |
-          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
-          # Monitor the local UPS as primary (powerdown when battery critical)
-          MONITOR {{ nut_ups_name }}@localhost 1 upsmon pass primary
-
-          # Minimum number of power sources to stay running
-          MINSUPPLIES 1
-
-          # Shutdown command
-          SHUTDOWNCMD "/usr/sbin/shutdown -h +0"
-
-          # How often to poll (seconds)
-          POLLFREQ 5
-          POLLFREQALERT 5
-
-          # Deadtime: seconds without contact before declaring UPS stale
-          DEADTIME 15
-
-          # Host synchronization timeout (standalone: 0 is fine)
-          HOSTSYNC 15
-
-          # Final delay before shutdown
-          FINALDELAY 5
-
-          # Notification flags: syslog + execute notifycmd
-          NOTIFYFLAG ONLINE     SYSLOG+WALL
-          NOTIFYFLAG ONBATT     SYSLOG+WALL+EXEC
-          NOTIFYFLAG LOWBATT    SYSLOG+WALL+EXEC
-          NOTIFYFLAG FSD        SYSLOG+WALL+EXEC
-          NOTIFYFLAG SHUTDOWN   SYSLOG+WALL
-
-          # Custom notification messages
-          NOTIFYMSG ONLINE    "EUD: No-break com energia da rede (AC restaurado)"
-          NOTIFYMSG ONBATT    "EUD: ALERTA - Operando na bateria do no-break!"
-          NOTIFYMSG LOWBATT   "EUD: CRÍTICO - Bateria baixa, shutdown iminente!"
-          NOTIFYMSG FSD       "EUD: Forced Shutdown - Desligamento de emergência!"
-          NOTIFYMSG SHUTDOWN  "EUD: Sistema desligando para preservar dados."
-        owner: root
-        group: nut
-        mode: '0640'
-
-    - name: "Configure upssched for battery threshold shutdown"
-      ansible.builtin.copy:
-        dest: /etc/ups/upssched.conf
-        content: |
-          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
-          CMDSCRIPT /usr/local/bin/eud-ups-handler.sh
-          PIPEFN /run/nut/upssched.pipe
-          LOCKFN /run/nut/upssched.lock
-
-          # When on battery, start a timer; when back online, cancel it
-          AT ONBATT * START-TIMER onbatt 30
-          AT ONLINE * CANCEL-TIMER onbatt
-          AT LOWBATT * EXECUTE lowbatt
-          AT FSD * EXECUTE forced-shutdown
-        owner: root
-        group: nut
-        mode: '0640'
-
-    - name: "Deploy EUD UPS handler script"
-      ansible.builtin.copy:
-        dest: /usr/local/bin/eud-ups-handler.sh
-        content: |
-          #!/usr/bin/env bash
-          # EUD UPS Handler - Managed by Ansible
-          # Called by upssched when battery events occur
-
-          case "$1" in
-              onbatt)
-                  # Check battery level from upsc
-                  BATTERY_PCT=$(upsc {{ nut_ups_name }}@localhost battery.charge 2>/dev/null || echo "100")
-                  if [ "${BATTERY_PCT}" -le {{ nut_battery_shutdown_pct }} ]; then
-                      logger -t eud-ups "CRITICAL: Battery at ${BATTERY_PCT}% (<= {{ nut_battery_shutdown_pct }}%). Initiating graceful shutdown."
-                      /usr/sbin/upsmon -c fsd
-                  else
-                      logger -t eud-ups "WARNING: On battery at ${BATTERY_PCT}%. Threshold: {{ nut_battery_shutdown_pct }}%."
-                  fi
-                  ;;
-              lowbatt)
-                  logger -t eud-ups "CRITICAL: Low battery signal from UPS. Forcing shutdown."
-                  /usr/sbin/upsmon -c fsd
-                  ;;
-              forced-shutdown)
-                  logger -t eud-ups "EMERGENCY: Forced Shutdown initiated."
-                  ;;
-              *)
-                  logger -t eud-ups "Unknown event: $1"
-                  ;;
-          esac
-        owner: root
-        group: root
-        mode: '0755'
-
-    - name: "Check if NUT systemd services are available on booted deployment"
-      ansible.builtin.stat:
-        path: /usr/lib/systemd/system/nut-monitor.service
-      register: nut_service_stat
-
-    - name: "Enable and start NUT driver service"
-      ansible.builtin.systemd:
-        name: nut-driver-enumerator.service
-        state: started
-        enabled: true
-      when: nut_service_stat.stat.exists
-      failed_when: false
-
-    - name: "Enable and start NUT monitor service"
-      ansible.builtin.systemd:
-        name: nut-monitor.service
-        state: started
-        enabled: true
-      when: nut_service_stat.stat.exists
-      failed_when: false
-
-    - name: "Notify NUT reboot required (if newly installed)"
-      ansible.builtin.debug:
-        msg:
-          - "================================================================="
-          - "AVISO: NUT (Network UPS Tools) foi instalado via rpm-ostree."
-          - "Reinicie o computador para ativar o pacote layered."
-          - "Após o reboot, conecte o no-break USB e execute:"
-          - "  sudo upsdrvctl start"
-          - "  sudo systemctl start nut-driver-enumerator nut-monitor"
-          - "  upsc {{ nut_ups_name }}@localhost"
-          - "================================================================="
-      when: nut_install is defined and nut_install is changed
 
 # ==============================================================================
 # Play 4: EUD User Services (Ollama, Flatpaks, TileServer GL)
@@ -1200,11 +1002,11 @@
     ollama_port: 11434
     ollama_default_model: "llama3:8b"
 
-    # TileServer GL configuration
-    tileserver_image: "docker.io/maptiler/tileserver-gl:latest"
-    tileserver_container_name: "tileserver-gl"
-    tileserver_data_dir: "{{ user_home }}/dados/maps"
-    tileserver_port: 8080
+    # Bitcoin Core & Electrs configuration
+    bitcoin_image: "docker.io/ruimarinho/bitcoin-core:28"
+    electrs_image: "docker.io/getumbrel/electrs:v0.10.6"
+    bitcoin_data_dir: "/var/mnt/bitcoin-data/bitcoind"
+    electrs_data_dir: "/var/mnt/bitcoin-data/electrs"
 
     # Flatpak SDR/Radio/Maps applications
     flatpak_apps:
@@ -1355,74 +1157,88 @@
         - ollama
 
     # ------------------------------------------------------------------
-    # 3. TileServer GL (Mapas Offline via Podman Quadlet)
+    # 3. Bitcoin Core & Electrs Sovereign Full Node (Podman Quadlets)
     # ------------------------------------------------------------------
-    - name: "Ensure TileServer GL data directory exists"
+    - name: "Ensure Bitcoin Core and Electrs directories exist"
       ansible.builtin.file:
-        path: "{{ tileserver_data_dir }}"
+        path: "{{ item }}"
         state: directory
         mode: '0755'
+      loop:
+        - "{{ bitcoin_data_dir }}"
+        - "{{ electrs_data_dir }}"
       tags:
-        - maps
+        - bitcoin
 
-    - name: "Deploy TileServer GL Quadlet container unit"
+    - name: "Deploy Bitcoin Core Quadlet container unit"
       ansible.builtin.copy:
-        dest: "{{ user_home }}/.config/containers/systemd/tileserver-gl.container"
+        dest: "{{ user_home }}/.config/containers/systemd/bitcoind.container"
         content: |
           # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
-          # TileServer GL - Offline Maps Server (EUD)
+          # Bitcoin Core - Sovereign Full Node (EUD)
           [Unit]
-          Description=TileServer GL - Offline Maps (EUD)
+          Description=Bitcoin Core Sovereign Full Node (EUD)
           After=default.target
 
           [Container]
-          Image={{ tileserver_image }}
-          ContainerName={{ tileserver_container_name }}
-          User=root
-          PublishPort=127.0.0.1:{{ tileserver_port }}:8080
-          Volume={{ tileserver_data_dir }}:/data:Z
+          Image={{ bitcoin_image }}
+          ContainerName=bitcoind
+          Network=host
+          Volume={{ bitcoin_data_dir }}:/home/bitcoin/.bitcoin:U,z
+          Exec=bitcoind -conf=/home/bitcoin/.bitcoin/bitcoin.conf -datadir=/home/bitcoin/.bitcoin
           AutoUpdate=registry
 
           [Service]
           Restart=on-failure
-          RestartSec=10
-          TimeoutStartSec=120
+          RestartSec=15
+          TimeoutStartSec=300
+          TimeoutStopSec=600
 
           [Install]
           WantedBy=default.target
         mode: '0644'
-      register: tileserver_quadlet
+      register: bitcoind_quadlet
       tags:
-        - maps
+        - bitcoin
 
-    - name: "Reload systemd user daemon (TileServer Quadlet)"
+    - name: "Deploy Electrs Electrum Server Quadlet unit"
+      ansible.builtin.copy:
+        dest: "{{ user_home }}/.config/containers/systemd/electrs.container"
+        content: |
+          # Managed by Ansible (dotfiles/ansible/local/setup_pc.yml)
+          # Electrs - Electrum Rust Server (EUD)
+          [Unit]
+          Description=Electrs Electrum Server (EUD)
+          After=bitcoind.service default.target
+          Wants=bitcoind.service
+
+          [Container]
+          Image={{ electrs_image }}
+          ContainerName=electrs
+          Network=host
+          Volume={{ electrs_data_dir }}:/data:U,z
+          Volume={{ bitcoin_data_dir }}:/data/.bitcoin:ro,U,z
+          Exec=--db-dir=/data/db --daemon-dir=/data/.bitcoin --cookie-file=/data/.bitcoin/.cookie --electrum-rpc-addr=0.0.0.0:50001 --daemon-rpc-addr=127.0.0.1:8332 --daemon-p2p-addr=127.0.0.1:8333 --log-filters=INFO
+          AutoUpdate=registry
+
+          [Service]
+          Restart=on-failure
+          RestartSec=15
+          TimeoutStartSec=300
+
+          [Install]
+          WantedBy=default.target
+        mode: '0644'
+      register: electrs_quadlet
+      tags:
+        - bitcoin
+
+    - name: "Reload systemd user daemon (Bitcoin Quadlets)"
       ansible.builtin.systemd:
         daemon_reload: true
         scope: user
       environment:
         XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
-      when: tileserver_quadlet is changed
+      when: bitcoind_quadlet is changed or electrs_quadlet is changed
       tags:
-        - maps
-
-    - name: "Restart TileServer GL container service if quadlet changed"
-      ansible.builtin.systemd:
-        name: tileserver-gl.service
-        scope: user
-        state: restarted
-      environment:
-        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
-      when: tileserver_quadlet is changed
-      tags:
-        - maps
-
-    - name: "Enable and start TileServer GL container service"
-      ansible.builtin.systemd:
-        name: tileserver-gl.service
-        scope: user
-        state: started
-        enabled: true
-      environment:
-        XDG_RUNTIME_DIR: "{{ xdg_runtime_dir }}"
-      tags:
-        - maps
+        - bitcoin

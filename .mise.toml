@@ -37,16 +37,21 @@ description = "Run complete test suite (syntax and host verification)"
 depends = ["lint", "test:syntax", "verify"]
 
 [tasks."apply:eud"]
-description = "Apply EUD station setup (Ollama, Flatpaks, TileServer, NUT)"
+description = "Apply EUD station setup (Ollama, Flatpaks, TileServer, SatDump)"
 run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags eud -K"
 
 [tasks."apply:eud:user"]
-description = "Apply EUD user services only (Ollama, Flatpaks, TileServer)"
-run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags ollama,flatpak,maps,sdr"
+description = "Apply EUD user services only (Ollama, Flatpaks, Bitcoin, Electrs)"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags ollama,flatpak,bitcoin,sdr"
 
-[tasks."apply:eud:nut"]
-description = "Apply NUT/UPS power resilience (requires root)"
-run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags nut -K"
+[tasks."apply:bitcoin"]
+description = "Apply Bitcoin Core & Electrs Sovereign Full Node Quadlets"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags bitcoin"
+
+
+[tasks."apply:eud:satdump"]
+description = "Apply SatDump satellite tooling (requires root)"
+run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags satdump -K"
 
 [tasks."distrobox:create"]
 description = "Assemble the SRE Distrobox toolbox container"

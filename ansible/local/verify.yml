@@ -180,61 +180,44 @@
       ansible.builtin.assert:
         that:
           - satdump_installed.rc == 0
-        fail_msg: "AVISO: SatDump não está instalado. Execute 'mise run apply:eud:nut' com -K."
+        fail_msg: "AVISO: SatDump não está instalado. Execute 'mise run apply:eud:satdump' com -K."
         success_msg: "OK: SatDump (satélites meteorológicos) instalado."
 
     # --------------------------------------------------------------------------
-    # 8. EUD - TileServer GL Verification
+    # 8. EUD - Bitcoin Core & Electrs Sovereign Full Node Verification
     # --------------------------------------------------------------------------
-    - name: "Check TileServer GL container status"
+    - name: "Check Bitcoin Core container status"
       ansible.builtin.command:
-        cmd: podman ps --format "{{ '{{' }}.Names{{ '}}' }}" --filter name=tileserver-gl
-      register: tileserver_ps
+        cmd: podman ps --format "{{ '{{' }}.Names{{ '}}' }}" --filter name=bitcoind
+      register: bitcoind_ps
       changed_when: false
       failed_when: false
 
-    - name: "Assert TileServer GL container is running"
+    - name: "Assert Bitcoin Core container is running"
       ansible.builtin.assert:
         that:
-          - "'tileserver-gl' in tileserver_ps.stdout"
-        fail_msg: "AVISO: Container TileServer GL não está rodando."
-        success_msg: "OK: TileServer GL ativo, mapas offline disponíveis em http://localhost:8080."
+          - "'bitcoind' in bitcoind_ps.stdout"
+        fail_msg: "AVISO: Container bitcoind não está rodando."
+        success_msg: "OK: Bitcoin Core ativo e sincronizando blockchain soberana no disco de 1.8 TB."
 
-    # --------------------------------------------------------------------------
-    # 9. EUD - NUT/UPS Verification
-    # --------------------------------------------------------------------------
-    - name: "Check if NUT packages are installed"
+    - name: "Check Electrs Electrum Server container status"
       ansible.builtin.command:
-        cmd: rpm -q nut
-      register: nut_installed
+        cmd: podman ps --format "{{ '{{' }}.Names{{ '}}' }}" --filter name=electrs
+      register: electrs_ps
       changed_when: false
       failed_when: false
 
-    - name: "Assert NUT is installed"
+    - name: "Assert Electrs Electrum Server container is running"
       ansible.builtin.assert:
         that:
-          - nut_installed.rc == 0
-        fail_msg: "AVISO: NUT não está instalado. Execute 'mise run apply:system' com -K."
-        success_msg: "OK: NUT (Network UPS Tools) instalado."
-
-    - name: "Check NUT monitor service status"
-      ansible.builtin.systemd:
-        name: nut-monitor.service
-      register: nut_monitor_status
-      failed_when: false
-
-    - name: "Assert NUT monitor is active"
-      ansible.builtin.assert:
-        that:
-          - nut_monitor_status.status.ActiveState == 'active'
-        fail_msg: "AVISO: nut-monitor.service não está ativo. Conecte o no-break USB e reinicie os serviços."
-        success_msg: "OK: NUT monitor ativo, protegendo contra falha de energia."
-      when: nut_installed.rc == 0
-      ignore_errors: true
+          - "'electrs' in electrs_ps.stdout"
+        fail_msg: "AVISO: Container electrs não está rodando."
+        success_msg: "OK: Electrs ativo, servindo carteiras soberanas na porta 50001."
 
     # --------------------------------------------------------------------------
-    # 10. Distrobox SRE & Platform Engineering Toolkit Verification
+    # 9. Distrobox SRE & Platform Engineering Toolkit Verification
     # --------------------------------------------------------------------------
+
     - name: "Check if Distrobox CLI is available on host"
       ansible.builtin.command:
         cmd: distrobox --version
