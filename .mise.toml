@@ -48,6 +48,22 @@ run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --
 description = "Apply Bitcoin Core & Electrs Sovereign Full Node Quadlets"
 run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --tags bitcoin"
 
+[tasks."bitcoin:unlock"]
+description = "Unlock LUKS2 vault, mount /var/mnt/bitcoin-data, and start bitcoind + electrs"
+run = "./scripts/bitcoin-luks.sh unlock"
+
+[tasks."bitcoin:lock"]
+description = "Stop bitcoind + electrs, unmount /var/mnt/bitcoin-data, and lock LUKS2 partition"
+run = "./scripts/bitcoin-luks.sh lock"
+
+[tasks."bitcoin:status"]
+description = "Check status of Bitcoin LUKS mapper, mountpoint, and Quadlet services"
+run = "./scripts/bitcoin-luks.sh status"
+
+[tasks."bitcoin:logs"]
+description = "Follow live logs from bitcoind and electrs"
+run = "./scripts/bitcoin-luks.sh logs"
+
 
 [tasks."apply:eud:satdump"]
 description = "Apply SatDump satellite tooling (requires root)"

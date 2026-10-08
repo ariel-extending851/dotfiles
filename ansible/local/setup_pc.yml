@@ -1184,6 +1184,8 @@
           Image={{ bitcoin_image }}
           ContainerName=bitcoind
           Network=host
+          Environment=UID=1000
+          Environment=GID=1000
           Volume={{ bitcoin_data_dir }}:/home/bitcoin/.bitcoin:U,z
           Exec=bitcoind -conf=/home/bitcoin/.bitcoin/bitcoin.conf -datadir=/home/bitcoin/.bitcoin
           AutoUpdate=registry
@@ -1217,7 +1219,7 @@
           ContainerName=electrs
           Network=host
           Volume={{ electrs_data_dir }}:/data:U,z
-          Volume={{ bitcoin_data_dir }}:/data/.bitcoin:ro,U,z
+          Volume={{ bitcoin_data_dir }}:/data/.bitcoin:ro,z
           Exec=--db-dir=/data/db --daemon-dir=/data/.bitcoin --cookie-file=/data/.bitcoin/.cookie --electrum-rpc-addr=0.0.0.0:50001 --daemon-rpc-addr=127.0.0.1:8332 --daemon-p2p-addr=127.0.0.1:8333 --log-filters=INFO
           AutoUpdate=registry
 
