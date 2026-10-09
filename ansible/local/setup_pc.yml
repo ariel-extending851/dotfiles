@@ -1007,6 +1007,7 @@
     electrs_image: "docker.io/getumbrel/electrs:v0.10.6"
     bitcoin_data_dir: "/var/mnt/bitcoin-data/bitcoind"
     electrs_data_dir: "/var/mnt/bitcoin-data/electrs"
+    bitcoin_dbcache: 2048
 
     # Flatpak SDR/Radio/Maps applications
     flatpak_apps:
@@ -1047,6 +1048,68 @@
       tags:
         - flatpak
         - sdr
+
+    # ------------------------------------------------------------------
+    # 1.1 Desktop GPU Acceleration & Browser Decoding (Flatpak)
+    # ------------------------------------------------------------------
+    - name: "Detect host NVIDIA driver version"
+      ansible.builtin.command:
+        cmd: nvidia-smi --query-gpu=driver_version --format=csv,noheader
+      register: host_nvidia_driver_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - flatpak
+        - gpu
+        - performance
+
+    - name: "Ensure Flatpak NVIDIA GL runtimes match host driver"
+      ansible.builtin.command:
+        cmd: "flatpak install --system --noninteractive flathub org.freedesktop.Platform.GL.nvidia-{{ host_nvidia_driver_check.stdout.strip() | regex_replace('\\.', '-') }} org.freedesktop.Platform.GL32.nvidia-{{ host_nvidia_driver_check.stdout.strip() | regex_replace('\\.', '-') }} org.freedesktop.Platform.VAAPI.nvidia"
+      register: flatpak_nvidia_install
+      changed_when: "'Installing' in flatpak_nvidia_install.stdout"
+      failed_when: false
+      when: host_nvidia_driver_check.rc == 0 and host_nvidia_driver_check.stdout.strip() != ""
+      tags:
+        - flatpak
+        - gpu
+        - performance
+
+    - name: "Ensure Brave Flatpak config directory exists"
+      ansible.builtin.file:
+        path: "{{ user_home }}/.var/app/com.brave.Browser/config"
+        state: directory
+        mode: '0755'
+      tags:
+        - flatpak
+        - brave
+        - gpu
+
+    - name: "Deploy Brave GPU hardware acceleration flags"
+      ansible.builtin.copy:
+        dest: "{{ user_home }}/.var/app/com.brave.Browser/config/brave-flags.conf"
+        content: |
+          --ozone-platform-hint=auto
+          --enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoDecoder,CanvasOopRasterization
+          --enable-gpu-rasterization
+          --enable-zero-copy
+          --ignore-gpu-blocklist
+        mode: '0644'
+      tags:
+        - flatpak
+        - brave
+        - gpu
+
+    - name: "Configure Brave Flatpak DRI device permissions"
+      ansible.builtin.command:
+        cmd: flatpak override --user --device=dri com.brave.Browser
+      register: brave_flatpak_override
+      changed_when: false
+      failed_when: false
+      tags:
+        - flatpak
+        - brave
+        - gpu
 
     # ------------------------------------------------------------------
     # 2. Ollama Local AI (Podman Rootless + Quadlet)
@@ -1160,13 +1223,13 @@
     # 3. Bitcoin Core & Electrs Sovereign Full Node (Podman Quadlets)
     # ------------------------------------------------------------------
     - name: "Ensure Bitcoin Core and Electrs directories exist"
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: '0755'
+      ansible.builtin.command:
+        cmd: "mkdir -p {{ item }}"
       loop:
         - "{{ bitcoin_data_dir }}"
         - "{{ electrs_data_dir }}"
+      changed_when: false
+      failed_when: false
       tags:
         - bitcoin
 
@@ -1195,11 +1258,35 @@
           RestartSec=15
           TimeoutStartSec=300
           TimeoutStopSec=600
+          Nice=19
+          CPUSchedulingPolicy=idle
+          IOSchedulingClass=idle
+          MemoryHigh=4500M
+          MemoryMax=5500M
 
           [Install]
           WantedBy=default.target
         mode: '0644'
       register: bitcoind_quadlet
+      tags:
+        - bitcoin
+
+    - name: "Check if bitcoin.conf exists in cold vault mount"
+      ansible.builtin.command:
+        cmd: "podman unshare test -f {{ bitcoin_data_dir }}/bitcoin.conf"
+      register: bitcoin_conf_check
+      failed_when: false
+      changed_when: false
+      tags:
+        - bitcoin
+
+    - name: "Tune Bitcoin Core dbcache for 16 GB RAM workstation"
+      ansible.builtin.command:
+        cmd: "podman unshare sed -i -E 's/^dbcache=.*/dbcache={{ bitcoin_dbcache }}/' {{ bitcoin_data_dir }}/bitcoin.conf"
+      register: bitcoin_dbcache_update
+      changed_when: false
+      failed_when: false
+      when: bitcoin_conf_check.rc == 0
       tags:
         - bitcoin
 

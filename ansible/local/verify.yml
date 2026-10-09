@@ -169,6 +169,18 @@
         fail_msg: "FALHA: Nem todos os Flatpaks SDR estão instalados!"
         success_msg: "OK: Todos os Flatpaks SDR/Rádio operacionais."
 
+    - name: "Check Brave GPU flags configuration"
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/.var/app/com.brave.Browser/config/brave-flags.conf"
+      register: brave_flags_stat
+
+    - name: "Assert Brave GPU hardware acceleration flags exist"
+      ansible.builtin.assert:
+        that:
+          - brave_flags_stat.stat.exists
+        fail_msg: "AVISO: Configuração de flags do Brave (brave-flags.conf) não encontrada."
+        success_msg: "OK: Flags de decodificação por GPU do Brave configuradas."
+
     - name: "Check if SatDump is installed (rpm-ostree)"
       ansible.builtin.command:
         cmd: rpm -q SatDump
@@ -199,6 +211,20 @@
           - "'bitcoind' in bitcoind_ps.stdout"
         fail_msg: "AVISO: Container bitcoind não está rodando."
         success_msg: "OK: Bitcoin Core ativo e sincronizando blockchain soberana no disco de 1.8 TB."
+
+    - name: "Check bitcoind Quadlet unit file configuration"
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts['env']['HOME'] }}/.config/containers/systemd/bitcoind.container"
+      register: bitcoind_unit_slurp
+
+    - name: "Assert Bitcoin Core runs with idle scheduling and memory limits"
+      ansible.builtin.assert:
+        that:
+          - "'Nice=19' in (bitcoind_unit_slurp.content | b64decode)"
+          - "'CPUSchedulingPolicy=idle' in (bitcoind_unit_slurp.content | b64decode)"
+          - "'MemoryHigh=4500M' in (bitcoind_unit_slurp.content | b64decode)"
+        fail_msg: "AVISO: Quadlet do Bitcoin Core não possui governança de CPU/RAM configurada."
+        success_msg: "OK: Bitcoin Core calibrado com prioridade IDLE e teto de RAM para preservar desktop."
 
     - name: "Check Electrs Electrum Server container status"
       ansible.builtin.command:
