@@ -1090,19 +1090,27 @@
         dest: "{{ user_home }}/.var/app/com.brave.Browser/config/brave-flags.conf"
         content: |
           --ozone-platform-hint=auto
-          --enable-features=VaapiVideoDecodeLinuxGL,VaapiVideoDecoder,CanvasOopRasterization
+          --enable-features=VaapiOnNvidiaGPUs,VaapiIgnoreDriverChecks,VaapiVideoDecodeLinuxGL,VaapiVideoDecoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,CanvasOopRasterization
           --enable-gpu-rasterization
           --enable-zero-copy
           --ignore-gpu-blocklist
+          --use-gl=angle
+          --use-angle=gl
         mode: '0644'
       tags:
         - flatpak
         - brave
         - gpu
 
-    - name: "Configure Brave Flatpak DRI device permissions"
+    - name: "Configure Brave Flatpak DRI and VA-API environment overrides"
       ansible.builtin.command:
-        cmd: flatpak override --user --device=dri com.brave.Browser
+        cmd: >
+          flatpak override --user
+          --device=dri
+          --env=LIBVA_DRIVER_NAME=nvidia
+          --env=LIBVA_DRIVERS_PATH=/usr/lib/x86_64-linux-gnu/dri/nvidia-vaapi-driver
+          --env=NVD_BACKEND=direct
+          com.brave.Browser
       register: brave_flatpak_override
       changed_when: false
       failed_when: false

@@ -170,16 +170,34 @@
         success_msg: "OK: Todos os Flatpaks SDR/Rádio operacionais."
 
     - name: "Check Brave GPU flags configuration"
-      ansible.builtin.stat:
-        path: "{{ ansible_facts['env']['HOME'] }}/.var/app/com.brave.Browser/config/brave-flags.conf"
-      register: brave_flags_stat
+      ansible.builtin.slurp:
+        src: "{{ ansible_facts['env']['HOME'] }}/.var/app/com.brave.Browser/config/brave-flags.conf"
+      register: brave_flags_slurp
 
     - name: "Assert Brave GPU hardware acceleration flags exist"
       ansible.builtin.assert:
         that:
-          - brave_flags_stat.stat.exists
-        fail_msg: "AVISO: Configuração de flags do Brave (brave-flags.conf) não encontrada."
-        success_msg: "OK: Flags de decodificação por GPU do Brave configuradas."
+          - "'VaapiOnNvidiaGPUs' in (brave_flags_slurp.content | b64decode)"
+          - "'VaapiIgnoreDriverChecks' in (brave_flags_slurp.content | b64decode)"
+          - "'AcceleratedVideoDecodeLinuxGL' in (brave_flags_slurp.content | b64decode)"
+        fail_msg: "AVISO: Flags de aceleração por GPU do Brave incompletas ou ausentes."
+        success_msg: "OK: Flags de decodificação por GPU do Brave (NVDEC/VA-API) operacionais."
+
+    - name: "Check Brave Flatpak overrides configuration"
+      ansible.builtin.command:
+        cmd: flatpak override --user --show com.brave.Browser
+      register: brave_overrides_check
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert Brave Flatpak VA-API overrides are active"
+      ansible.builtin.assert:
+        that:
+          - "'LIBVA_DRIVER_NAME=nvidia' in brave_overrides_check.stdout"
+          - "'LIBVA_DRIVERS_PATH=' in brave_overrides_check.stdout"
+          - "'NVD_BACKEND=direct' in brave_overrides_check.stdout"
+        fail_msg: "AVISO: Overrides de ambiente VA-API do Brave Flatpak ausentes."
+        success_msg: "OK: Variáveis de ambiente VA-API/NVDEC ativas no sandbox Flatpak do Brave."
 
     - name: "Check if SatDump is installed (rpm-ostree)"
       ansible.builtin.command:
