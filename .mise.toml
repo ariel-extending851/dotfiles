@@ -101,4 +101,16 @@ run = "ansible-playbook -i ansible/local/hosts.ini ansible/local/setup_pc.yml --
 description = "Switch desktop theme (tokyonight, catppuccin, gruvbox, kanagawa)"
 run = "theme-switch"
 
+[tasks."telemetry:status"]
+description = "Check status of Torre telemetry collector, node-exporter, and Alloy forwarder"
+run = "systemctl --user status node-exporter.service alloy.service torre-telemetry.timer"
+
+[tasks."telemetry:metrics"]
+description = "Inspect live Prometheus metrics exported on Torre localhost:9100"
+run = "curl -s http://127.0.0.1:9100/metrics | grep -E 'node_gpu|node_bitcoin|node_disk_luks'"
+
+[tasks."telemetry:export"]
+description = "Force immediate refresh of Torre GPU, Bitcoin, and disk metrics"
+run = "./scripts/export-torre-telemetry.sh && cat ~/.local/share/node_exporter/textfile/torre.prom"
+
 
