@@ -924,6 +924,29 @@
         - devops
         - sre
 
+    # --------------------------------------------------------------------------
+    # 10. Tailscale Workstation Network Policy (Prevent Subnet Route Loopback)
+    # --------------------------------------------------------------------------
+    - name: "Check Tailscale preferences on Workstation"
+      ansible.builtin.command:
+        cmd: tailscale debug prefs
+      register: tailscale_prefs_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - network
+        - tailscale
+
+    - name: "Ensure Tailscale does not accept subnet routes on Workstation (--accept-routes=false)"
+      ansible.builtin.command:
+        cmd: tailscale set --accept-routes=false
+      when:
+        - tailscale_prefs_check.rc == 0
+        - "'\"RouteAll\": false' not in tailscale_prefs_check.stdout"
+      tags:
+        - network
+        - tailscale
+
 # ==============================================================================
 # Play 3: EUD System Configuration (Network UPS Tools)
 # Runs with root privileges (become: true). Use -K (--ask-become-pass).

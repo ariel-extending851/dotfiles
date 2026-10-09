@@ -550,5 +550,24 @@
         fail_msg: "FALHA: systemd-resolved não conseguiu resolver a.st1.ntp.br!"
         success_msg: "OK: systemd-resolved operacional com resolução DNS íntegra."
 
+    # --------------------------------------------------------------------------
+    # 16. Tailscale Workstation Network Routing Policy Verification
+    # --------------------------------------------------------------------------
+    - name: "Check Tailscale preferences on Workstation"
+      ansible.builtin.command:
+        cmd: tailscale debug prefs
+      register: tailscale_verify_prefs
+      changed_when: false
+      failed_when: false
+
+    - name: "Assert Tailscale does not accept subnet routes on Workstation"
+      ansible.builtin.assert:
+        that:
+          - tailscale_verify_prefs.rc == 0
+          - "'\"RouteAll\": false' in tailscale_verify_prefs.stdout"
+        fail_msg: "FALHA: Tailscale está configurada para aceitar rotas de sub-rede (--accept-routes=true), o que causa loopback/hairpinning na LAN local!"
+        success_msg: "OK: Tailscale configurada com --accept-routes=false (rotas locais nativas protegidas contra loopback)."
+      when: tailscale_verify_prefs.rc == 0
+
 
 
